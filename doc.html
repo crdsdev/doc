@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+
+<head>
+    <title>Doc</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+</head>
+
+<body>
+
+    <div class="container">
+        <h1>{{ .Repo }}</h1>
+        <h3><span class="label label-primary">Group</span> <code>{{ .Group }}</code></h3>
+        <h3><span class="label label-primary">Version</span> <code>{{ .Version }}</code></h3>
+        <h3><span class="label label-primary">Kind</span> <code>{{ .Kind }}</code></h3>
+        <h3>{{ .Description }}</h3>
+        <hr />
+        <div class="panel-group" id="accordion">
+            {{ if gt (len .Schema.Properties) 0}}
+            {{ template "field" .Schema.Properties }}
+            {{ end }}
+        </div>
+    </div>
+
+</body>
+
+</html>
+
+{{define "field"}}
+{{ range $key, $value := . }}
+{{ $randID := genRand }}
+<div class="panel panel-default">
+    <div class="panel-heading">
+        <h4 class="panel-title">
+            <a data-toggle="collapse" href="#{{ $randID }}">{{ $key }}</a>
+        </h4>
+    </div>
+    <div id="{{ $randID }}" class="panel-collapse collapse">
+        <div class="panel-body">
+            <p>{{ $value.Description }}</p>
+            <p><span class="label label-primary">Type</span> {{ $value.Type }}</p>
+            {{ if gt (len $value.Properties) 0}}
+            {{ template "field" $value.Properties }}
+            {{ end }}
+        </div>
+    </div>
+</div>
+{{ end }}
+{{end}}
