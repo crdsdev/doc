@@ -99,7 +99,7 @@ func doc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if crder.crd.Spec.Validation.OpenAPIV3Schema == nil {
+	if crder.crd.Spec.Validation == nil || crder.crd.Spec.Validation.OpenAPIV3Schema == nil {
 		log.Print("CRD schema is nil.")
 		fmt.Fprint(w, "Supplied CRD has no schema.")
 		return
