@@ -11,8 +11,15 @@
         body {
             background-color: black;
         }
-        h1 {
+        h1, p, a {
             color: white;
+        }
+        a {
+            text-decoration: underline;
+            text-decoration-style: solid;
+        }
+        a:hover {
+            color: blue;
         }
     </style>
 </head>
@@ -25,6 +32,7 @@
             <input id="path_box" type="text" class="form-control" placeholder="github.com/crossplane/crossplane/cluster/charts/crossplane-types/crds/cache.crossplane.io_redisclusters.yaml" aria-describedby="basic-addon2">
             <span class="input-group-addon" id="basic-addon2" onclick="location.href=('/'+document.getElementById('path_box').value)">Go</span>
           </div>
+        <p class="text-center">doc.crds.dev is and always will be <a href="https://github.com/crdsdev/doc">free and open source</a>.</p>
     </div>
 
 </body>

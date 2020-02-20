@@ -73,6 +73,7 @@ func home(w http.ResponseWriter, r *http.Request) {
 }
 
 func doc(w http.ResponseWriter, r *http.Request) {
+	var schema *apiextensions.CustomResourceValidation
 	log.Printf("Request Received: %s\n", r.URL.Path)
 	org, repo, file, err := parseGHURL(r.URL.Path)
 	if err != nil {
@@ -93,13 +94,28 @@ func doc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	crder, err := NewCRDer([]byte(content), true)
-	if err != nil {
+	if err != nil || crder.crd == nil {
 		log.Printf("failed to convert to CRD: %v", err)
 		fmt.Fprint(w, "Supplied file is not a valid CRD.")
 		return
 	}
 
-	if crder.crd.Spec.Validation == nil || crder.crd.Spec.Validation.OpenAPIV3Schema == nil {
+	schema = crder.crd.Spec.Validation
+	if len(crder.crd.Spec.Versions) > 1 {
+		for _, version := range crder.crd.Spec.Versions {
+			if version.Storage == true {
+				if version.Schema == nil {
+					log.Printf("storage version has not schema")
+					fmt.Fprint(w, "Specified storage version does not have a schema.")
+					return
+				}
+				schema = version.Schema
+				break
+			}
+		}
+	}
+
+	if schema == nil || schema.OpenAPIV3Schema == nil {
 		log.Print("CRD schema is nil.")
 		fmt.Fprint(w, "Supplied CRD has no schema.")
 		return
@@ -110,8 +126,8 @@ func doc(w http.ResponseWriter, r *http.Request) {
 		Group:       crder.crd.Spec.Group,
 		Version:     crder.crd.Spec.Version,
 		Kind:        crder.crd.Spec.Names.Kind,
-		Description: string(crder.crd.Spec.Validation.OpenAPIV3Schema.Description),
-		Schema:      *crder.crd.Spec.Validation.OpenAPIV3Schema,
+		Description: string(schema.OpenAPIV3Schema.Description),
+		Schema:      *schema.OpenAPIV3Schema,
 	}); err != nil {
 		log.Printf("docTemplate.Execute(w, nil): %v", err)
 		fmt.Fprint(w, "Supplied CRD has no schema.")
