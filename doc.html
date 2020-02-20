@@ -41,9 +41,52 @@
     <div id="{{ $randID }}" class="panel-collapse collapse">
         <div class="panel-body">
             <p>{{ $value.Description }}</p>
-            <p><span class="label label-primary">Type</span> {{ $value.Type }}</p>
-            {{ if gt (len $value.Properties) 0}}
-            {{ template "field" $value.Properties }}
+            <p><span class="label label-primary">Type</span> <code>{{ $value.Type }}</code></p>
+            {{ if gt (len $value.Required) 0}}
+                <p>
+                    <span class="label label-primary">Required Fields</span>
+                    {{ range $req := $value.Required }}
+                        <code>{{ $req }}</code>
+                    {{ end }}
+                </p>
+            {{ end }}
+            {{ if $value.Enum }}
+            <p><span class="label label-primary">Permitted Values</span> <code>{{ $value.Enum }}</code></p>
+            {{ end }}
+            {{ if $value.Minimum }}
+            <p><span class="label label-primary">Permitted Values</span> <code>{{ $value.Minimum }}</code></p>
+            {{ end }}
+            {{ if $value.Maximum }}
+            <p><span class="label label-primary">Permitted Values</span> <code>{{ $value.Maximum }}</code></p>
+            {{ end }}
+            {{ if gt (len $value.Properties) 0 }}
+                {{ template "field" $value.Properties }}
+            {{ end }}
+            {{ if $value.AdditionalProperties }}
+                {{ if $value.AdditionalProperties.Allows }}
+                    <p><b>AdditionalProperties allowed.</b></p>
+                {{ end }}
+                {{ if $value.AdditionalProperties.Schema }}
+                    <p>{{ $value.AdditionalProperties.Schema.Description }}</p>
+                    <p><span class="label label-primary">Type</span> <code>{{ $value.AdditionalProperties.Schema.Type }}</code></p>
+                    {{ if gt (len $value.AdditionalProperties.Schema.Properties) 0}}
+                        {{ template "field" $value.AdditionalProperties.Schema.Properties }}
+                    {{ end }}
+                {{ end }}
+            {{ end }}
+            {{ if $value.Items }}
+                {{ if $value.Items.Schema }}
+                    <p>{{ $value.Items.Schema.Description }}</p>
+                    <p><span class="label label-primary">Type</span> <code>{{ $value.Items.Schema.Type }}</code></p>
+                    {{ if gt (len $value.Items.Schema.Properties) 0}}
+                        {{ template "field" $value.Items.Schema.Properties }}
+                    {{ end }}
+                {{ end }}
+                {{ if $value.Items.JSONSchemas }}
+                    {{ if gt ($value.Items.JSONSchemas) 0 }}
+                        {{ template "field" $value.Items.JSONSchemas }}
+                    {{ end }}
+                {{ end }}
             {{ end }}
         </div>
     </div>
