@@ -25,6 +25,7 @@ RUN apk add --no-cache ca-certificates
 COPY --from=builder go/app/doc ./
 COPY ./doc.html .
 COPY ./home.html .
+COPY ./static ./static
 
 # Run the web service on container startup.
 ENTRYPOINT ["/doc"]
