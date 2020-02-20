@@ -82,7 +82,7 @@ func doc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	contents, _, _, err := client.Repositories.GetContents(context.TODO(), org, repo, file, nil)
-	if err != nil {
+	if err != nil || contents == nil {
 		log.Printf("failed to get Github contents: %v", err)
 		fmt.Fprintf(w, "Unable to find file in %s/%s on Github.", org, repo)
 		return
