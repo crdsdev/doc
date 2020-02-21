@@ -41,9 +41,9 @@ var docTemplate = template.Must(template.New("doc.html").Funcs(
 			return rand.String(10)
 		},
 	},
-).ParseFiles("doc.html"))
+).ParseFiles("template/doc.html"))
 
-var orgTemplate = template.Must(template.ParseFiles("org.html"))
+var orgTemplate = template.Must(template.ParseFiles("template/org.html"))
 
 type docData struct {
 	Repo        string
@@ -77,7 +77,7 @@ func main() {
 }
 
 func home(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "home.html")
+	http.ServeFile(w, r, "template/home.html")
 	log.Print("successfully rendered home page")
 }
 
