@@ -43,6 +43,8 @@ var docTemplate = template.Must(template.New("doc.html").Funcs(
 	},
 ).ParseFiles("doc.html"))
 
+var orgTemplate = template.Must(template.ParseFiles("org.html"))
+
 type docData struct {
 	Repo        string
 	Group       string
@@ -52,12 +54,19 @@ type docData struct {
 	Schema      apiextensions.JSONSchemaProps
 }
 
+type orgData struct {
+	Repo  string
+	CRDs  []github.CodeResult
+	Total int
+}
+
 func start() {
 	log.Println("Starting Doc server...")
 	r := mux.NewRouter().StrictSlash(true)
 	staticHandler := http.StripPrefix("/static/", http.FileServer(http.Dir("./static/")))
 	r.HandleFunc("/", home)
 	r.PathPrefix("/static/").Handler(staticHandler)
+	r.HandleFunc("/github.com/{org}/{repo}", org)
 	r.PathPrefix("/").HandlerFunc(doc)
 	log.Fatal(http.ListenAndServe(":8080", r))
 }
@@ -70,6 +79,29 @@ func main() {
 func home(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, "home.html")
 	log.Print("successfully rendered home page")
+}
+
+func org(w http.ResponseWriter, r *http.Request) {
+	parameters := mux.Vars(r)
+	org := parameters["org"]
+	repo := parameters["repo"]
+	query := fmt.Sprintf("q='kind: CustomResourceDefinition' in:file language:yaml repo:%s/%s", org, repo)
+	code, _, err := client.Search.Code(context.TODO(), query, nil)
+	if err != nil || code == nil {
+		log.Printf("failed to get Github repo CRDs: %v", err)
+		fmt.Fprintf(w, "Unable to find CRDs in %s/%s on Github.", org, repo)
+		return
+	}
+	if err := orgTemplate.Execute(w, orgData{
+		Repo:  strings.Join([]string{org, repo}, "/"),
+		CRDs:  code.CodeResults,
+		Total: code.GetTotal(),
+	}); err != nil {
+		log.Printf("orgTemplate.Execute(w, nil): %v", err)
+		fmt.Fprint(w, "Unable to render org template.")
+		return
+	}
+	log.Printf("successfully rendered org template")
 }
 
 func doc(w http.ResponseWriter, r *http.Request) {
@@ -133,7 +165,7 @@ func doc(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "Supplied CRD has no schema.")
 		return
 	}
-	log.Printf("successfully rendered template")
+	log.Printf("successfully rendered doc template")
 }
 
 // TODO(hasheddan): add testing and more reliable parse

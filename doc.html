@@ -13,7 +13,7 @@
 <body>
 
     <div class="container">
-        <h1>{{ .Repo }}</h1>
+        <h1><a href="/github.com/{{ .Repo }}">{{ .Repo }}</a></h1>
         <h3><span class="label label-primary">Group</span> <code>{{ .Group }}</code></h3>
         <h3><span class="label label-primary">Version</span> <code>{{ .Version }}</code></h3>
         <h3><span class="label label-primary">Kind</span> <code>{{ .Kind }}</code></h3>
