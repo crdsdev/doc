@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+
+<head>
+    <title>Doc</title>
+    <link rel="icon" type="image/png" href="/static/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+</head>
+
+<body>
+
+    <div class="container">
+        <h1><a href="/github.com/{{ .Repo }}">{{ .Repo }}</a></h1>
+        <a href="https://github.com/{{ .Repo }}"><span class="label label-primary">github.com/{{ .Repo }}</span></a>
+        <h3>CRDs discovered: <b>{{ .Total }}</b></h3>
+        <div class="table-responsive">
+            <table class="table">
+                {{ range $key, $value := .CRDs }}
+                <tr><td><a href="/github.com/{{ $.Repo }}/{{ $value.Path }}">{{ $value.Name }}</a></td></tr>
+                {{ end }}
+            </table>
+        </div>
+    </div>
+
+</body>
+
+</html>
