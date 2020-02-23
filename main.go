@@ -29,11 +29,18 @@ import (
 
 	"github.com/google/go-github/v29/github"
 	"github.com/gorilla/mux"
+	flag "github.com/spf13/pflag"
+	"golang.org/x/oauth2"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	"k8s.io/apimachinery/pkg/util/rand"
 )
 
 var client *github.Client
+
+// config flags
+var (
+	ghToken string
+)
 
 var docTemplate = template.Must(template.New("doc.html").Funcs(
 	template.FuncMap{
@@ -60,6 +67,23 @@ type orgData struct {
 	Total int
 }
 
+func init() {
+	flag.StringVar(&ghToken, "ghtoken", "", "Github personal access token.")
+}
+
+func main() {
+	flag.Parse()
+	var tc *http.Client
+	if ghToken != "" {
+		ts := oauth2.StaticTokenSource(
+			&oauth2.Token{AccessToken: ghToken},
+		)
+		tc = oauth2.NewClient(context.TODO(), ts)
+	}
+	client = github.NewClient(tc)
+	start()
+}
+
 func start() {
 	log.Println("Starting Doc server...")
 	r := mux.NewRouter().StrictSlash(true)
@@ -69,11 +93,6 @@ func start() {
 	r.HandleFunc("/github.com/{org}/{repo}", org)
 	r.PathPrefix("/").HandlerFunc(doc)
 	log.Fatal(http.ListenAndServe(":8080", r))
-}
-
-func main() {
-	client = github.NewClient(nil)
-	start()
 }
 
 func home(w http.ResponseWriter, r *http.Request) {
