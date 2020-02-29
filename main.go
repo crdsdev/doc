@@ -144,7 +144,7 @@ func doc(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Unable to get file contents at path %s/%s/%s on Github.", org, repo, file)
 		return
 	}
-	crder, err := NewCRDer([]byte(content), true)
+	crder, err := NewCRDer([]byte(content))
 	if err != nil || crder.crd == nil {
 		log.Printf("failed to convert to CRD: %v", err)
 		fmt.Fprint(w, "Supplied file is not a valid CRD.")

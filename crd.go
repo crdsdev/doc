@@ -19,6 +19,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	servervalidation "k8s.io/apiextensions-apiserver/pkg/apiserver/validation"
@@ -42,21 +43,16 @@ const (
 
 // CRDer generates instances of a CustomResourceDefinition.
 type CRDer struct {
-	crd    *apiextensions.CustomResourceDefinition
-	gvk    *schema.GroupVersionKind
-	isBeta bool
+	crd *apiextensions.CustomResourceDefinition
+	gvk *schema.GroupVersionKind
 }
 
 // NewCRDer returns a new CRDer type.
-func NewCRDer(data []byte, isBeta bool) (*CRDer, error) {
+func NewCRDer(data []byte) (*CRDer, error) {
 	internal := &apiextensions.CustomResourceDefinition{}
-	if isBeta {
-		if err := convertV1Beta1ToInternal(data, internal); err != nil {
-			return nil, err
-		}
-	} else {
-		if err := convertV1ToInternal(data, internal); err != nil {
-			return nil, err
+	if errV1Beta1 := convertV1Beta1ToInternal(data, internal); errV1Beta1 != nil {
+		if errV1 := convertV1ToInternal(data, internal); errV1 != nil {
+			return nil, fmt.Errorf("conversion unsuccessful: %s, %s", errV1Beta1, errV1)
 		}
 	}
 
@@ -65,7 +61,7 @@ func NewCRDer(data []byte, isBeta bool) (*CRDer, error) {
 		return nil, errors.New(getStoredGVKErr)
 	}
 
-	return &CRDer{crd: internal, gvk: gvk, isBeta: isBeta}, nil
+	return &CRDer{crd: internal, gvk: gvk}, nil
 }
 
 // Validate returns true if CRD instance is valid.
