@@ -342,35 +342,31 @@ func TestValidate(t *testing.T) {
 		name        string
 		crd         []byte
 		instance    []byte
-		isBeta      bool
 		expectedErr bool
 	}{
 		{
 			name:        "v1 invalid",
 			crd:         v1crd,
 			instance:    a,
-			isBeta:      false,
 			expectedErr: true,
 		},
 		{
 			name:        "v1beta1 valid",
 			crd:         v1beta1crd,
 			instance:    a,
-			isBeta:      true,
 			expectedErr: false,
 		},
 		{
 			name:        "crossplane valid",
 			crd:         crossplane,
 			instance:    b,
-			isBeta:      true,
 			expectedErr: false,
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			c, err := NewCRDer(tc.crd, tc.isBeta)
+			c, err := NewCRDer(tc.crd)
 			if err != nil {
 				t.Errorf("Failed to create CRDer: %s", err)
 			}
