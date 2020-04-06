@@ -13,7 +13,7 @@ COPY . .
 RUN go mod download
 
 # Build the binary.
-RUN CGO_ENABLED=0 GOOS=linux go build -mod=readonly -v .
+RUN CGO_ENABLED=0 GOOS=linux go build -o gitter -mod=readonly -v ./cmd/gitter/main.go
 
 # Use the official Alpine image for a lean production container.
 # https://hub.docker.com/_/alpine
@@ -22,9 +22,7 @@ FROM alpine:3
 RUN apk add --no-cache ca-certificates
 
 # Copy the binary to the production image from the builder stage.
-COPY --from=builder go/app/doc ./
-COPY ./template ./template
-COPY ./static ./static
+COPY --from=builder go/app/gitter ./
 
 # Run the web service on container startup.
-ENTRYPOINT ["/doc"]
+ENTRYPOINT ["/gitter"]

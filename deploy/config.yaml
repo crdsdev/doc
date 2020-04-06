@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: crdsdev
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: doc-repos
+  namespace: crdsdev
+data:
+  repos: "crossplane/crossplane,crossplane/provider-gcp,crossplane/provider-aws,crossplane/provider-azure,crossplane/provider-alibaba,crossplane/provider-rook"
