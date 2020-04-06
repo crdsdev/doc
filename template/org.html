@@ -13,13 +13,13 @@
 <body>
 
     <div class="container">
-        <h1><a href="/github.com/{{ .Repo }}">{{ .Repo }}</a></h1>
-        <a href="https://github.com/{{ .Repo }}"><span class="label label-primary">github.com/{{ .Repo }}</span></a>
+        <h1><a href="/github.com/{{ .Repo }}{{ .At }}{{ .Tag }}">{{ .Repo }}{{ .At }}{{ .Tag }}</a></h1>
+        <a href="https://github.com/{{ .Repo }}/tree/{{ .Tag }}"><span class="label label-primary">github.com/{{ .Repo }}/tree/{{ .Tag }}</span></a>
         <h3>CRDs discovered: <b>{{ .Total }}</b></h3>
         <div class="table-responsive">
             <table class="table">
-                {{ range $key, $value := .CRDs }}
-                <tr><td><a href="/github.com/{{ $.Repo }}/{{ $value.Path }}">{{ $value.Name }}</a></td></tr>
+                {{ range $path, $name := .CRDs }}
+                <tr><td><a href="/github.com/{{ $.Repo }}/{{ $path }}{{ $.At }}{{ $.Tag }}">{{ $name }}</a></td></tr>
                 {{ end }}
             </table>
         </div>
