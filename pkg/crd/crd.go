@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package crd
 
 import (
 	"encoding/json"
@@ -43,8 +43,8 @@ const (
 
 // CRDer generates instances of a CustomResourceDefinition.
 type CRDer struct {
-	crd *apiextensions.CustomResourceDefinition
-	gvk *schema.GroupVersionKind
+	CRD *apiextensions.CustomResourceDefinition
+	GVK *schema.GroupVersionKind
 }
 
 // NewCRDer returns a new CRDer type.
@@ -61,12 +61,12 @@ func NewCRDer(data []byte) (*CRDer, error) {
 		return nil, errors.New(getStoredGVKErr)
 	}
 
-	return &CRDer{crd: internal, gvk: gvk}, nil
+	return &CRDer{CRD: internal, GVK: gvk}, nil
 }
 
 // Validate returns true if CRD instance is valid.
 func (c *CRDer) Validate(data []byte) error {
-	sv := getStoredSchema(c.crd.Spec)
+	sv := getStoredSchema(c.CRD.Spec)
 
 	s, _, err := servervalidation.NewSchemaValidator(sv)
 	if err != nil {
@@ -83,7 +83,7 @@ func (c *CRDer) Validate(data []byte) error {
 		return errors.New(getTypeMetaErr)
 	}
 
-	if !isStoredGVK(meta, c.gvk) {
+	if !isStoredGVK(meta, c.GVK) {
 		return errors.New(wrongGVKErr)
 	}
 

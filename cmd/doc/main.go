@@ -17,29 +17,30 @@ limitations under the License.
 package main
 
 import (
-	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
 	"log"
 	"net/http"
 	"net/url"
-	"path"
+	"os"
 	"strings"
 
-	"github.com/google/go-github/v29/github"
+	"github.com/go-redis/redis"
 	"github.com/gorilla/mux"
 	flag "github.com/spf13/pflag"
-	"golang.org/x/oauth2"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	"k8s.io/apimachinery/pkg/util/rand"
 )
 
-var client *github.Client
+var redisClient *redis.Client
 
-// config flags
+// redis connection
 var (
-	ghToken string
+	envAddress = "REDIS_HOST"
+
+	address string
 )
 
 var docTemplate = template.Must(template.New("doc.html").Funcs(
@@ -51,9 +52,12 @@ var docTemplate = template.Must(template.New("doc.html").Funcs(
 ).ParseFiles("template/doc.html"))
 
 var orgTemplate = template.Must(template.ParseFiles("template/org.html"))
+var newTemplate = template.Must(template.ParseFiles("template/new.html"))
 
 type docData struct {
 	Repo        string
+	Tag         string
+	At          string
 	Group       string
 	Version     string
 	Kind        string
@@ -63,24 +67,22 @@ type docData struct {
 
 type orgData struct {
 	Repo  string
-	CRDs  []github.CodeResult
+	Tag   string
+	At    string
+	CRDs  map[string]string
 	Total int
 }
 
 func init() {
-	flag.StringVar(&ghToken, "ghtoken", "", "Github personal access token.")
+	address = os.Getenv(envAddress)
 }
 
 func main() {
 	flag.Parse()
-	var tc *http.Client
-	if ghToken != "" {
-		ts := oauth2.StaticTokenSource(
-			&oauth2.Token{AccessToken: ghToken},
-		)
-		tc = oauth2.NewClient(context.TODO(), ts)
-	}
-	client = github.NewClient(tc)
+
+	redisClient = redis.NewClient(&redis.Options{
+		Addr: address + ":6379",
+	})
 	start()
 }
 
@@ -90,9 +92,10 @@ func start() {
 	staticHandler := http.StripPrefix("/static/", http.FileServer(http.Dir("./static/")))
 	r.HandleFunc("/", home)
 	r.PathPrefix("/static/").Handler(staticHandler)
+	r.HandleFunc("/github.com/{org}/{repo}@{tag}", org)
 	r.HandleFunc("/github.com/{org}/{repo}", org)
 	r.PathPrefix("/").HandlerFunc(doc)
-	log.Fatal(http.ListenAndServe(":8080", r))
+	log.Fatal(http.ListenAndServe(":5000", r))
 }
 
 func home(w http.ResponseWriter, r *http.Request) {
@@ -104,17 +107,34 @@ func org(w http.ResponseWriter, r *http.Request) {
 	parameters := mux.Vars(r)
 	org := parameters["org"]
 	repo := parameters["repo"]
-	query := fmt.Sprintf("q='kind: CustomResourceDefinition' in:file language:yaml repo:%s/%s", org, repo)
-	code, _, err := client.Search.Code(context.TODO(), query, nil)
-	if err != nil || code == nil {
-		log.Printf("failed to get Github repo CRDs: %v", err)
-		fmt.Fprintf(w, "Unable to find CRDs in %s/%s on Github.", org, repo)
+	tag := parameters["tag"]
+	at := ""
+	if tag != "" {
+		at = "@"
+	}
+	res, err := redisClient.Get(strings.Join([]string{"github.com", org, repo}, "/") + at + tag).Result()
+	if err != nil {
+		log.Printf("failed to get CRDs for %s : %v", repo, err)
+		if err := newTemplate.Execute(w, nil); err != nil {
+			log.Printf("newTemplate.Execute(w, nil): %v", err)
+			fmt.Fprint(w, "Unable to render new template.")
+		}
+		return
+	}
+
+	crds := &map[string]string{}
+	bytes := []byte(res)
+	if err := json.Unmarshal(bytes, crds); err != nil {
+		log.Printf("failed to get CRDs for %s : %v", repo, err)
+		http.ServeFile(w, r, "template/home.html")
 		return
 	}
 	if err := orgTemplate.Execute(w, orgData{
 		Repo:  strings.Join([]string{org, repo}, "/"),
-		CRDs:  code.CodeResults,
-		Total: code.GetTotal(),
+		Tag:   tag,
+		At:    at,
+		CRDs:  *crds,
+		Total: len(*crds),
 	}); err != nil {
 		log.Printf("orgTemplate.Execute(w, nil): %v", err)
 		fmt.Fprint(w, "Unable to render org template.")
@@ -125,35 +145,37 @@ func org(w http.ResponseWriter, r *http.Request) {
 
 func doc(w http.ResponseWriter, r *http.Request) {
 	var schema *apiextensions.CustomResourceValidation
+	crd := &apiextensions.CustomResourceDefinition{}
 	log.Printf("Request Received: %s\n", r.URL.Path)
-	org, repo, file, err := parseGHURL(r.URL.Path)
+	org, repo, tag, err := parseGHURL(r.URL.Path)
 	if err != nil {
 		log.Printf("failed to parse Github path: %v", err)
 		fmt.Fprint(w, "Invalid URL.")
 		return
 	}
-	contents, _, _, err := client.Repositories.GetContents(context.TODO(), org, repo, file, nil)
-	if err != nil || contents == nil {
-		log.Printf("failed to get Github contents: %v", err)
-		fmt.Fprintf(w, "Unable to find file in %s/%s on Github.", org, repo)
-		return
+	at := ""
+	if tag != "" {
+		at = "@"
 	}
-	content, err := contents.GetContent()
+	res, err := redisClient.Get(strings.Trim(r.URL.Path, "/")).Result()
 	if err != nil {
-		log.Printf("failed to get Github file contents: %v", err)
-		fmt.Fprintf(w, "Unable to get file contents at path %s/%s/%s on Github.", org, repo, file)
+		log.Printf("failed to get CRDs for %s : %v", repo, err)
+		if err := newTemplate.Execute(w, nil); err != nil {
+			log.Printf("newTemplate.Execute(w, nil): %v", err)
+			fmt.Fprint(w, "Unable to render new template.")
+		}
 		return
 	}
-	crder, err := NewCRDer([]byte(content))
-	if err != nil || crder.crd == nil {
+
+	if err := json.Unmarshal([]byte(res), crd); err != nil {
 		log.Printf("failed to convert to CRD: %v", err)
 		fmt.Fprint(w, "Supplied file is not a valid CRD.")
 		return
 	}
 
-	schema = crder.crd.Spec.Validation
-	if len(crder.crd.Spec.Versions) > 1 {
-		for _, version := range crder.crd.Spec.Versions {
+	schema = crd.Spec.Validation
+	if len(crd.Spec.Versions) > 1 {
+		for _, version := range crd.Spec.Versions {
 			if version.Storage == true {
 				if version.Schema == nil {
 					log.Printf("storage version has not schema")
@@ -174,9 +196,11 @@ func doc(w http.ResponseWriter, r *http.Request) {
 
 	if err := docTemplate.Execute(w, docData{
 		Repo:        strings.Join([]string{org, repo}, "/"),
-		Group:       crder.crd.Spec.Group,
-		Version:     crder.crd.Spec.Version,
-		Kind:        crder.crd.Spec.Names.Kind,
+		Tag:         tag,
+		At:          at,
+		Group:       crd.Spec.Group,
+		Version:     crd.Spec.Version,
+		Kind:        crd.Spec.Names.Kind,
 		Description: string(schema.OpenAPIV3Schema.Description),
 		Schema:      *schema.OpenAPIV3Schema,
 	}); err != nil {
@@ -188,7 +212,7 @@ func doc(w http.ResponseWriter, r *http.Request) {
 }
 
 // TODO(hasheddan): add testing and more reliable parse
-func parseGHURL(uPath string) (org, repo, file string, err error) {
+func parseGHURL(uPath string) (org, repo, tag string, err error) {
 	u, err := url.Parse(uPath)
 	if err != nil {
 		return "", "", "", err
@@ -198,5 +222,10 @@ func parseGHURL(uPath string) (org, repo, file string, err error) {
 		return "", "", "", errors.New("invalid path")
 	}
 
-	return elements[1], elements[2], path.Join(elements[3:]...), nil
+	tagSplit := strings.Split(u.Path, "@")
+	if len(tagSplit) > 1 {
+		tag = tagSplit[1]
+	}
+
+	return elements[1], elements[2], tag, nil
 }
