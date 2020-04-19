@@ -14,7 +14,11 @@
 
     <div class="container">
         <h1><a href="/github.com/{{ .Repo }}{{ .At }}{{ .Tag }}">{{ .Repo }}{{ .At }}{{ .Tag }}</a></h1>
-        <a href="https://github.com/{{ .Repo }}/tree/{{ .Tag }}"><span class="label label-primary">github.com/{{ .Repo }}/tree/{{ .Tag }}</span></a>
+        {{ if .Tag }}
+            <a href="https://github.com/{{ .Repo }}/tree/{{ .Tag }}"><span class="label label-primary">github.com/{{ .Repo }}/tree/{{ .Tag }}</span></a>
+        {{ else }}
+            <a href="https://github.com/{{ .Repo }}/tree/master"><span class="label label-primary">github.com/{{ .Repo }}/tree/master</span></a>
+        {{ end }}
         <h3>CRDs discovered: <b>{{ .Total }}</b></h3>
         <div class="table-responsive">
             <table class="table">
