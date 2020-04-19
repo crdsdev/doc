@@ -31,7 +31,6 @@ import (
 	"github.com/gorilla/mux"
 	flag "github.com/spf13/pflag"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
-	"k8s.io/apimachinery/pkg/util/rand"
 )
 
 var redisClient *redis.Client
@@ -43,10 +42,19 @@ var (
 	address string
 )
 
+// SchemaPlusParent is a JSON schema plus the name of the parent field.
+type SchemaPlusParent struct {
+	Parent string
+	Schema map[string]apiextensions.JSONSchemaProps
+}
+
 var docTemplate = template.Must(template.New("doc.html").Funcs(
 	template.FuncMap{
-		"genRand": func() string {
-			return rand.String(10)
+		"plusParent": func(p string, s map[string]apiextensions.JSONSchemaProps) *SchemaPlusParent {
+			return &SchemaPlusParent{
+				Parent: p,
+				Schema: s,
+			}
 		},
 	},
 ).ParseFiles("template/doc.html"))
