@@ -36,6 +36,15 @@
         <p class="text-center">doc.crds.dev is and always will be <a href="https://github.com/crdsdev/doc">free and open source</a>.</p>
     </div>
 
+    <script>
+        $('#path_box').keypress(function (event) {
+                var keycode = (event.keyCode ? event.keyCode : event.which);
+                if (keycode == '13') {
+                    $('#basic-addon2').click();
+                }
+            });
+    </script>
+
 </body>
 
 </html>
