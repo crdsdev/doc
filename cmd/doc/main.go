@@ -37,9 +37,11 @@ var redisClient *redis.Client
 
 // redis connection
 var (
-	envAddress = "REDIS_HOST"
+	envAddress   = "REDIS_HOST"
+	envAnalytics = "ANALYTICS"
 
-	address string
+	address   string
+	analytics bool = false
 )
 
 // SchemaPlusParent is a JSON schema plus the name of the parent field.
@@ -57,12 +59,14 @@ var docTemplate = template.Must(template.New("doc.html").Funcs(
 			}
 		},
 	},
-).ParseFiles("template/doc.html"))
+).ParseFiles("template/doc.html", "template/analytics.html"))
 
-var orgTemplate = template.Must(template.ParseFiles("template/org.html"))
-var newTemplate = template.Must(template.ParseFiles("template/new.html"))
+var orgTemplate = template.Must(template.ParseFiles("template/org.html", "template/analytics.html"))
+var newTemplate = template.Must(template.ParseFiles("template/new.html", "template/analytics.html"))
+var homeTemplate = template.Must(template.ParseFiles("template/home.html", "template/analytics.html"))
 
 type docData struct {
+	Analytics   bool
 	Repo        string
 	Tag         string
 	At          string
@@ -74,15 +78,30 @@ type docData struct {
 }
 
 type orgData struct {
-	Repo  string
-	Tag   string
-	At    string
-	CRDs  map[string]string
-	Total int
+	Analytics bool
+	Repo      string
+	Tag       string
+	At        string
+	CRDs      map[string]string
+	Total     int
+}
+
+type homeData struct {
+	Analytics bool
+}
+
+type newData struct {
+	Analytics bool
 }
 
 func init() {
 	address = os.Getenv(envAddress)
+
+	// TODO(hasheddan): use a flag
+	analyticsStr := os.Getenv(envAnalytics)
+	if analyticsStr == "true" {
+		analytics = true
+	}
 }
 
 func main() {
@@ -107,7 +126,11 @@ func start() {
 }
 
 func home(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "template/home.html")
+	if err := homeTemplate.Execute(w, homeData{Analytics: analytics}); err != nil {
+		log.Printf("homeTemplate.Execute(): %v", err)
+		fmt.Fprint(w, "Unable to render home template.")
+		return
+	}
 	log.Print("successfully rendered home page")
 }
 
@@ -123,8 +146,8 @@ func org(w http.ResponseWriter, r *http.Request) {
 	res, err := redisClient.Get(strings.Join([]string{"github.com", org, repo}, "/") + at + tag).Result()
 	if err != nil {
 		log.Printf("failed to get CRDs for %s : %v", repo, err)
-		if err := newTemplate.Execute(w, nil); err != nil {
-			log.Printf("newTemplate.Execute(w, nil): %v", err)
+		if err := newTemplate.Execute(w, newData{Analytics: analytics}); err != nil {
+			log.Printf("newTemplate.Execute(): %v", err)
 			fmt.Fprint(w, "Unable to render new template.")
 		}
 		return
@@ -138,13 +161,14 @@ func org(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := orgTemplate.Execute(w, orgData{
-		Repo:  strings.Join([]string{org, repo}, "/"),
-		Tag:   tag,
-		At:    at,
-		CRDs:  *crds,
-		Total: len(*crds),
+		Analytics: analytics,
+		Repo:      strings.Join([]string{org, repo}, "/"),
+		Tag:       tag,
+		At:        at,
+		CRDs:      *crds,
+		Total:     len(*crds),
 	}); err != nil {
-		log.Printf("orgTemplate.Execute(w, nil): %v", err)
+		log.Printf("orgTemplate.Execute(): %v", err)
 		fmt.Fprint(w, "Unable to render org template.")
 		return
 	}
@@ -168,8 +192,8 @@ func doc(w http.ResponseWriter, r *http.Request) {
 	res, err := redisClient.Get(strings.Trim(r.URL.Path, "/")).Result()
 	if err != nil {
 		log.Printf("failed to get CRDs for %s : %v", repo, err)
-		if err := newTemplate.Execute(w, nil); err != nil {
-			log.Printf("newTemplate.Execute(w, nil): %v", err)
+		if err := newTemplate.Execute(w, newData{Analytics: analytics}); err != nil {
+			log.Printf("newTemplate.Execute(): %v", err)
 			fmt.Fprint(w, "Unable to render new template.")
 		}
 		return
@@ -203,6 +227,7 @@ func doc(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := docTemplate.Execute(w, docData{
+		Analytics:   analytics,
 		Repo:        strings.Join([]string{org, repo}, "/"),
 		Tag:         tag,
 		At:          at,
@@ -212,7 +237,7 @@ func doc(w http.ResponseWriter, r *http.Request) {
 		Description: string(schema.OpenAPIV3Schema.Description),
 		Schema:      *schema.OpenAPIV3Schema,
 	}); err != nil {
-		log.Printf("docTemplate.Execute(w, nil): %v", err)
+		log.Printf("docTemplate.Execute(): %v", err)
 		fmt.Fprint(w, "Supplied CRD has no schema.")
 		return
 	}
