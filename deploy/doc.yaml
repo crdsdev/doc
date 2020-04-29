@@ -23,6 +23,8 @@ spec:
                 secretKeyRef:
                   name: doc-redis
                   key: endpoint
+            - name: ANALYTICS
+              value: "true"
           ports:
             - containerPort: 5000
               name: doc
