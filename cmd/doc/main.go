@@ -59,11 +59,11 @@ var docTemplate = template.Must(template.New("doc.html").Funcs(
 			}
 		},
 	},
-).ParseFiles("template/doc.html", "template/analytics.html"))
+).ParseFiles("template/doc.html", "template/analytics.html", "template/twitter.html"))
 
-var orgTemplate = template.Must(template.ParseFiles("template/org.html", "template/analytics.html"))
-var newTemplate = template.Must(template.ParseFiles("template/new.html", "template/analytics.html"))
-var homeTemplate = template.Must(template.ParseFiles("template/home.html", "template/analytics.html"))
+var orgTemplate = template.Must(template.ParseFiles("template/org.html", "template/analytics.html", "template/twitter.html"))
+var newTemplate = template.Must(template.ParseFiles("template/new.html", "template/analytics.html", "template/twitter.html"))
+var homeTemplate = template.Must(template.ParseFiles("template/home.html", "template/analytics.html", "template/twitter.html"))
 
 type docData struct {
 	Analytics   bool
