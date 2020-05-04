@@ -33,6 +33,8 @@ import (
 	"gopkg.in/src-d/go-git.v4/plumbing/object"
 )
 
+const popularReposSet = "repos:popular"
+
 var redisClient *redis.Client
 
 var (
@@ -73,6 +75,10 @@ func main() {
 
 func gitter(repos []string, r *redis.Client) error {
 	log.Println("Starting gitter...")
+
+	if _, err := r.SAdd(popularReposSet, repos).Result(); err != nil {
+		log.Printf("Failed to add repos to set: %v", err)
+	}
 
 	for _, repoURL := range repos {
 		log.Printf("Indexing repo %s...\n", repoURL)
