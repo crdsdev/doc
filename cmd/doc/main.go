@@ -88,6 +88,7 @@ type orgData struct {
 
 type homeData struct {
 	Analytics bool
+	Repos     []string
 }
 
 type newData struct {
@@ -126,7 +127,13 @@ func start() {
 }
 
 func home(w http.ResponseWriter, r *http.Request) {
-	if err := homeTemplate.Execute(w, homeData{Analytics: analytics}); err != nil {
+	data := homeData{Analytics: analytics}
+	if res, err := redisClient.SMembers("repos:popular").Result(); err != nil {
+		log.Printf("failed to get popular repos : %v", err)
+	} else {
+		data.Repos = res
+	}
+	if err := homeTemplate.Execute(w, data); err != nil {
 		log.Printf("homeTemplate.Execute(): %v", err)
 		fmt.Fprint(w, "Unable to render home template.")
 		return
