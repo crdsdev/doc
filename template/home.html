@@ -16,7 +16,7 @@
         body {
             background-color: black;
         }
-        h1, p, a {
+        h1, h3, p, a {
             color: white;
         }
         a {
@@ -33,18 +33,25 @@
 
     <div class="container">
         <h1 class="text-center">doc.crds.dev</h1>          
-          <div class="input-group">
-            <input id="path_box" type="text" class="form-control" placeholder="github.com/crossplane/provider-gcp" aria-describedby="basic-addon2">
-            <span class="input-group-addon" id="basic-addon2" onclick="location.href=('/'+document.getElementById('path_box').value)">Go</span>
+        <div class="input-group input-group-lg">
+            <input id="path_box" type="text" class="form-control" placeholder="github.com/crossplane/provider-gcp" aria-describedby="sizing-addon1">
+            <span class="input-group-addon" id="sizing-addon1" onclick="location.href=('/'+document.getElementById('path_box').value)">Go</span>
           </div>
         <p class="text-center">doc.crds.dev is and always will be <a href="https://github.com/crdsdev/doc">free and open source</a>.</p>
+        <p>To find a repo, search <kbd>github.com/{org}/{repo}</kbd>. You may optionally append <kbd>@{version}</kbd> to view documentation for a specific version of the project. For example: <a href="/github.com/crossplane/crossplane@v0.10.0">github.com/crossplane/crossplane@v0.10.0</a>. If you do not include a tag, the latest from <kbd>master</kbd> will be served.</p>
+        {{ if gt (len .Repos) 0}}
+        <h3>Recently Viewed Projects</h3>
+        {{ end }}
+        {{ range $name := .Repos }}
+        <a href="/github.com/{{ $name }}"><h4>github.com/{{ $name }}</h4></a>
+        {{ end }}
     </div>
 
     <script>
         $('#path_box').keypress(function (event) {
                 var keycode = (event.keyCode ? event.keyCode : event.which);
                 if (keycode == '13') {
-                    $('#basic-addon2').click();
+                    $('#sizing-addon1').click();
                 }
             });
     </script>
