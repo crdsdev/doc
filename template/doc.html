@@ -14,10 +14,19 @@
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
 </head>
 
-<body>
+<body style="padding-top: 50px;">
 
+    <nav class="navbar navbar-default navbar-fixed-top">
+        <div class="container-fluid">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="/">Doc</a>
+            </div>
+            <ul class="nav navbar-nav navbar-right">
+                <li><a class="navbar-brand" style="color: #0275d8;" href="/github.com/{{ .Repo }}{{ .At }}{{ .Tag }}">{{ .Repo }}{{ .At }}{{ .Tag }}</a></li>
+            </ul>
+        </div>
+    </nav>
     <div class="container">
-        <h1><a href="/github.com/{{ .Repo }}{{ .At }}{{ .Tag }}">{{ .Repo }}{{ .At }}{{ .Tag }}</a></h1>
         <h3><span class="label label-primary">Group</span> <code>{{ .Group }}</code></h3>
         <h3><span class="label label-primary">Version</span> <code>{{ .Version }}</code></h3>
         <h3><span class="label label-primary">Kind</span> <code>{{ .Kind }}</code></h3>
@@ -32,16 +41,26 @@
 
     <script>
         function copyLink(identifier) {
-                var copyText = window.location.href.split('#')[0] + "#" + identifier;
-                var el = document.createElement('textarea');
-                el.value = copyText;
-                el.setAttribute('readonly', '');
-                el.style = { position: 'absolute', left: '-9999px' };
-                document.body.appendChild(el);
-                el.select();
-                document.execCommand('copy');
-                document.body.removeChild(el);
+            var copyText = window.location.href.split('#')[0] + "#" + identifier;
+            var el = document.createElement('textarea');
+            el.value = copyText;
+            el.setAttribute('readonly', '');
+            el.style = { position: 'absolute', left: '-9999px' };
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+            window.location.href = copyText
+            offsetAnchor()
+        }
+
+        function offsetAnchor() {
+            if (location.hash.length !== 0) {
+                window.scrollTo(window.scrollX, window.scrollY - 50);
             }
+        }
+
+        window.setTimeout(offsetAnchor, 0);
     </script>
 
 </body>
