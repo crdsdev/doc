@@ -14,8 +14,15 @@
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
 </head>
 
-<body>
+<body style="padding-top: 50px;">
 
+    <nav class="navbar navbar-default navbar-fixed-top">
+        <div class="container-fluid">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="/">Doc</a>
+            </div>
+        </div>
+    </nav>
     <div class="container">
         <h1><a href="/github.com/{{ .Repo }}{{ .At }}{{ .Tag }}">{{ .Repo }}{{ .At }}{{ .Tag }}</a></h1>
         {{ if .Tag }}
