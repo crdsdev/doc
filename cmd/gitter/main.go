@@ -182,7 +182,6 @@ func getCRDsFromTag(repo string, dir string, tag string, hash *plumbing.Hash, w 
 			log.Printf("failed to read CRD file: %v", err)
 			continue
 		}
-		repoCrds[res.FileName] = path.Base(res.FileName)
 
 		crder, err := crd.NewCRDer([]byte(b))
 		if err != nil || crder.CRD == nil {
@@ -196,6 +195,7 @@ func getCRDsFromTag(repo string, dir string, tag string, hash *plumbing.Hash, w 
 			continue
 		}
 
+		repoCrds[res.FileName] = path.Base(res.FileName)
 		crds["github.com"+"/"+repo+"/"+res.FileName+"@"+tag] = bytes
 	}
 	return repoCrds, crds, nil
@@ -216,7 +216,6 @@ func getCRDsFromMaster(repo string, dir string, w *git.Worktree) (map[string]str
 			log.Printf("failed to read CRD file: %s", res.FileName)
 			continue
 		}
-		repoCrds[res.FileName] = path.Base(res.FileName)
 
 		crder, err := crd.NewCRDer([]byte(b))
 		if err != nil || crder.CRD == nil {
@@ -229,6 +228,8 @@ func getCRDsFromMaster(repo string, dir string, w *git.Worktree) (map[string]str
 			log.Printf("failed to marshal CRD: %s/%s, %v", res.FileName, "master", err)
 			continue
 		}
+
+		repoCrds[res.FileName] = path.Base(res.FileName)
 		crds["github.com"+"/"+repo+"/"+res.FileName] = bytes
 	}
 	return repoCrds, crds, nil
