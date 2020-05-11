@@ -26,11 +26,11 @@ import (
 	"strings"
 
 	"github.com/crdsdev/doc/pkg/crd"
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-redis/redis/v7"
 	flag "github.com/spf13/pflag"
 	"gopkg.in/square/go-jose.v2/json"
-	"gopkg.in/src-d/go-git.v4"
-	"gopkg.in/src-d/go-git.v4/plumbing/object"
 )
 
 const popularReposSet = "repos:popular"
@@ -94,7 +94,7 @@ func gitter(repos []string, r *redis.Client) error {
 			return err
 		}
 
-		iter, err := repo.TagObjects()
+		iter, err := repo.Tags()
 		if err != nil {
 			return err
 		}
@@ -124,23 +124,28 @@ func gitter(repos []string, r *redis.Client) error {
 		}
 
 		// Get tags
-		if err := iter.ForEach(func(obj *object.Tag) error {
-			log.Printf(obj.Name)
-			repoCrds, crds, err := getCRDsFromTag(repoURL, dir, obj, w)
-			if err != nil {
-				log.Printf("Unable to get CRDs: %s@%s", repoURL, obj.Name)
-				return err
+		if err := iter.ForEach(func(obj *plumbing.Reference) error {
+			h, err := repo.ResolveRevision(plumbing.Revision(obj.Hash().String()))
+			if err != nil || h == nil {
+				log.Printf("Unable to resolve revision: %s (%v)", obj.Hash().String(), err)
 			}
-			if err := r.MSet(crds); err.Err() != nil {
-				log.Printf("Unable to mass set CRD contents for %s@%s", repoURL, obj.Name)
-				return err.Err()
+			repoCrds, crds, err := getCRDsFromTag(repoURL, dir, obj.Name().Short(), h, w)
+			if err != nil {
+				log.Printf("Unable to get CRDs: %s@%s (%v)", repoURL, obj.Name().Short(), err)
+				return nil
+			}
+			if len(crds) > 0 {
+				if err := r.MSet(crds); err.Err() != nil {
+					log.Printf("Unable to mass set CRD contents for %s@%s", repoURL, obj.Name().Short())
+					return err.Err()
+				}
 			}
 			bytes, err := json.Marshal(repoCrds)
 			if err != nil {
 				return err
 			}
-			if err := r.Set("github.com"+"/"+repoURL+"@"+obj.Name, bytes, 0); err.Err() != nil {
-				log.Printf("Unable to set CRD list for %s@%s", repoURL, obj.Name)
+			if err := r.Set("github.com"+"/"+repoURL+"@"+obj.Name().Short(), bytes, 0); err.Err() != nil {
+				log.Printf("Unable to set CRD list for %s@%s", repoURL, obj.Name().Short())
 				return err.Err()
 			}
 			return nil
@@ -153,13 +158,12 @@ func gitter(repos []string, r *redis.Client) error {
 	return nil
 }
 
-func getCRDsFromTag(repo string, dir string, obj *object.Tag, w *git.Worktree) (map[string]string, map[string]interface{}, error) {
-	commit, err := obj.Commit()
-	if err != nil {
-		return nil, nil, err
-	}
-	err = w.Checkout(&git.CheckoutOptions{
-		Hash: commit.Hash,
+func getCRDsFromTag(repo string, dir string, tag string, hash *plumbing.Hash, w *git.Worktree) (map[string]string, map[string]interface{}, error) {
+	log.Printf("Getting CRDs for tag (%s) at commit (%s)", tag, hash.String())
+
+	err := w.Checkout(&git.CheckoutOptions{
+		Hash:  *hash,
+		Force: true,
 	})
 	if err != nil {
 		return nil, nil, err
@@ -175,10 +179,9 @@ func getCRDsFromTag(repo string, dir string, obj *object.Tag, w *git.Worktree) (
 	for _, res := range g {
 		b, err := ioutil.ReadFile(dir + "/" + res.FileName)
 		if err != nil {
-			log.Printf("failed to read CRD file: %s", res.FileName)
+			log.Printf("failed to read CRD file: %v", err)
 			continue
 		}
-		repoCrds[res.FileName] = path.Base(res.FileName)
 
 		crder, err := crd.NewCRDer([]byte(b))
 		if err != nil || crder.CRD == nil {
@@ -188,10 +191,12 @@ func getCRDsFromTag(repo string, dir string, obj *object.Tag, w *git.Worktree) (
 
 		bytes, err := json.Marshal(crder.CRD)
 		if err != nil {
-			log.Printf("failed to marshal CRD: %s/%s, %v", res.FileName, obj.Name, err)
+			log.Printf("failed to marshal CRD: %s/%s, %v", res.FileName, tag, err)
 			continue
 		}
-		crds["github.com"+"/"+repo+"/"+res.FileName+"@"+obj.Name] = bytes
+
+		repoCrds[res.FileName] = path.Base(res.FileName)
+		crds["github.com"+"/"+repo+"/"+res.FileName+"@"+tag] = bytes
 	}
 	return repoCrds, crds, nil
 }
@@ -211,7 +216,6 @@ func getCRDsFromMaster(repo string, dir string, w *git.Worktree) (map[string]str
 			log.Printf("failed to read CRD file: %s", res.FileName)
 			continue
 		}
-		repoCrds[res.FileName] = path.Base(res.FileName)
 
 		crder, err := crd.NewCRDer([]byte(b))
 		if err != nil || crder.CRD == nil {
@@ -224,6 +228,8 @@ func getCRDsFromMaster(repo string, dir string, w *git.Worktree) (map[string]str
 			log.Printf("failed to marshal CRD: %s/%s, %v", res.FileName, "master", err)
 			continue
 		}
+
+		repoCrds[res.FileName] = path.Base(res.FileName)
 		crds["github.com"+"/"+repo+"/"+res.FileName] = bytes
 	}
 	return repoCrds, crds, nil
