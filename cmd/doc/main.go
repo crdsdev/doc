@@ -216,12 +216,9 @@ func doc(w http.ResponseWriter, r *http.Request) {
 	if len(crd.Spec.Versions) > 1 {
 		for _, version := range crd.Spec.Versions {
 			if version.Storage == true {
-				if version.Schema == nil {
-					log.Printf("storage version has not schema")
-					fmt.Fprint(w, "Specified storage version does not have a schema.")
-					return
+				if version.Schema != nil {
+					schema = version.Schema
 				}
-				schema = version.Schema
 				break
 			}
 		}
