@@ -20,6 +20,10 @@ import (
 	"testing"
 )
 
+var _ Modifier = StripLabels()
+var _ Modifier = StripAnnotations()
+var _ Modifier = StripConversion()
+
 var v1crd = []byte(`
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition

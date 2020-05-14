@@ -48,10 +48,10 @@ type CRDer struct {
 }
 
 // NewCRDer returns a new CRDer type.
-func NewCRDer(data []byte) (*CRDer, error) {
+func NewCRDer(data []byte, m ...Modifier) (*CRDer, error) {
 	internal := &apiextensions.CustomResourceDefinition{}
-	if errV1Beta1 := convertV1Beta1ToInternal(data, internal); errV1Beta1 != nil {
-		if errV1 := convertV1ToInternal(data, internal); errV1 != nil {
+	if errV1Beta1 := convertV1Beta1ToInternal(data, internal, m...); errV1Beta1 != nil {
+		if errV1 := convertV1ToInternal(data, internal, m...); errV1 != nil {
 			return nil, fmt.Errorf("conversion unsuccessful: %s, %s", errV1Beta1, errV1)
 		}
 	}
@@ -99,7 +99,7 @@ func (c *CRDer) Validate(data []byte) error {
 	return nil
 }
 
-func convertV1ToInternal(data []byte, internal *apiextensions.CustomResourceDefinition) error {
+func convertV1ToInternal(data []byte, internal *apiextensions.CustomResourceDefinition, mods ...Modifier) error {
 	crd := &v1.CustomResourceDefinition{}
 	if err := yaml.Unmarshal(data, crd); err != nil {
 		return err
@@ -107,6 +107,9 @@ func convertV1ToInternal(data []byte, internal *apiextensions.CustomResourceDefi
 	v1.SetDefaults_CustomResourceDefinition(crd)
 	if err := v1.Convert_v1_CustomResourceDefinition_To_apiextensions_CustomResourceDefinition(crd, internal, nil); err != nil {
 		return err
+	}
+	for _, m := range mods {
+		m(internal)
 	}
 	errList := validation.ValidateCustomResourceDefinition(internal, v1.SchemeGroupVersion)
 	if len(errList) > 0 {
@@ -116,7 +119,7 @@ func convertV1ToInternal(data []byte, internal *apiextensions.CustomResourceDefi
 	return nil
 }
 
-func convertV1Beta1ToInternal(data []byte, internal *apiextensions.CustomResourceDefinition) error {
+func convertV1Beta1ToInternal(data []byte, internal *apiextensions.CustomResourceDefinition, mods ...Modifier) error {
 	crd := &v1beta1.CustomResourceDefinition{}
 	if err := yaml.Unmarshal(data, crd); err != nil {
 		return err
@@ -124,6 +127,9 @@ func convertV1Beta1ToInternal(data []byte, internal *apiextensions.CustomResourc
 	v1beta1.SetObjectDefaults_CustomResourceDefinition(crd)
 	if err := v1beta1.Convert_v1beta1_CustomResourceDefinition_To_apiextensions_CustomResourceDefinition(crd, internal, nil); err != nil {
 		return err
+	}
+	for _, m := range mods {
+		m(internal)
 	}
 	errList := validation.ValidateCustomResourceDefinition(internal, v1beta1.SchemeGroupVersion)
 	if len(errList) > 0 {
@@ -165,4 +171,29 @@ func isStoredGVK(meta *metav1.TypeMeta, gvk *schema.GroupVersionKind) bool {
 	}
 
 	return false
+}
+
+// A Modifier specifies how to modify a CRD prior to conversion to internal
+// representation
+type Modifier func(crd *apiextensions.CustomResourceDefinition)
+
+// StripLabels removes labels from a CRD's metadata
+func StripLabels() Modifier {
+	return func(crd *apiextensions.CustomResourceDefinition) {
+		crd.SetLabels(map[string]string{})
+	}
+}
+
+// StripAnnotations removes annotations from a CRD's metadata
+func StripAnnotations() Modifier {
+	return func(crd *apiextensions.CustomResourceDefinition) {
+		crd.SetAnnotations(map[string]string{})
+	}
+}
+
+// StripConversion removes conversion from a CRD's spec
+func StripConversion() Modifier {
+	return func(crd *apiextensions.CustomResourceDefinition) {
+		crd.Spec.Conversion = nil
+	}
 }

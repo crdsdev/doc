@@ -183,7 +183,7 @@ func getCRDsFromTag(repo string, dir string, tag string, hash *plumbing.Hash, w 
 			continue
 		}
 
-		crder, err := crd.NewCRDer([]byte(b))
+		crder, err := crd.NewCRDer([]byte(b), crd.StripLabels(), crd.StripAnnotations(), crd.StripConversion())
 		if err != nil || crder.CRD == nil {
 			log.Printf("failed to convert to CRD: %v", err)
 			continue
@@ -217,7 +217,7 @@ func getCRDsFromMaster(repo string, dir string, w *git.Worktree) (map[string]str
 			continue
 		}
 
-		crder, err := crd.NewCRDer([]byte(b))
+		crder, err := crd.NewCRDer([]byte(b), crd.StripLabels(), crd.StripAnnotations(), crd.StripConversion())
 		if err != nil || crder.CRD == nil {
 			log.Printf("failed to convert to CRD: %v", err)
 			continue
