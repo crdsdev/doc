@@ -9,4 +9,4 @@ metadata:
   name: doc-repos
   namespace: crdsdev
 data:
-  repos: "crossplane/crossplane,crossplane/provider-gcp,crossplane/provider-aws,crossplane/provider-azure,crossplane/provider-alibaba,crossplane/provider-rook,kubernetes-sigs/cluster-api"
+  repos: "crossplane/crossplane,crossplane/provider-gcp,crossplane/provider-aws,crossplane/provider-azure,crossplane/provider-alibaba,crossplane/provider-rook,kubernetes-sigs/cluster-api,jetstack/cert-manager"
