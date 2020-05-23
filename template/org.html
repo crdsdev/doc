@@ -31,10 +31,11 @@
             <a href="https://github.com/{{ .Repo }}/tree/master"><span class="label label-primary">github.com/{{ .Repo }}/tree/master</span></a>
         {{ end }}
         <h3>CRDs discovered: <b>{{ .Total }}</b></h3>
+        <p><b>Last parsed:</b> {{ .LastParsed }}</p>
         <div class="table-responsive">
             <table class="table">
-                {{ range $path, $name := .CRDs }}
-                <tr><td><a href="/github.com/{{ $.Repo }}/{{ $path }}{{ $.At }}{{ $.Tag }}">{{ $name }}</a></td></tr>
+                {{ range $i, $crd := .CRDs }}
+                <tr><td><a href="/github.com/{{ $.Repo }}/{{ $crd.Path }}{{ $.At }}{{ $.Tag }}">{{ $crd.CRD.Spec.Names.Kind }}</a></td><td>{{ $crd.CRD.Spec.Group }}/{{ $crd.CRD.Spec.Version }}</td></tr>
                 {{ end }}
             </table>
         </div>
