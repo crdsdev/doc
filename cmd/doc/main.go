@@ -26,7 +26,9 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/crdsdev/doc/pkg/models"
 	"github.com/go-redis/redis"
 	"github.com/gorilla/mux"
 	flag "github.com/spf13/pflag"
@@ -78,12 +80,13 @@ type docData struct {
 }
 
 type orgData struct {
-	Analytics bool
-	Repo      string
-	Tag       string
-	At        string
-	CRDs      map[string]string
-	Total     int
+	Analytics  bool
+	Repo       string
+	Tag        string
+	At         string
+	CRDs       []models.RepoCRD
+	Total      int
+	LastParsed string
 }
 
 type homeData struct {
@@ -160,20 +163,21 @@ func org(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	crds := &map[string]string{}
+	repoData := &models.Repo{}
 	bytes := []byte(res)
-	if err := json.Unmarshal(bytes, crds); err != nil {
+	if err := json.Unmarshal(bytes, repoData); err != nil {
 		log.Printf("failed to get CRDs for %s : %v", repo, err)
 		http.ServeFile(w, r, "template/home.html")
 		return
 	}
 	if err := orgTemplate.Execute(w, orgData{
-		Analytics: analytics,
-		Repo:      strings.Join([]string{org, repo}, "/"),
-		Tag:       tag,
-		At:        at,
-		CRDs:      *crds,
-		Total:     len(*crds),
+		Analytics:  analytics,
+		Repo:       strings.Join([]string{org, repo}, "/"),
+		Tag:        tag,
+		At:         at,
+		CRDs:       repoData.CRDs,
+		Total:      len(repoData.CRDs),
+		LastParsed: repoData.LastParsed.Format(time.RFC1123Z),
 	}); err != nil {
 		log.Printf("orgTemplate.Execute(): %v", err)
 		fmt.Fprint(w, "Unable to render org template.")
