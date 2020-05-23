@@ -24,8 +24,10 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/crdsdev/doc/pkg/crd"
+	"github.com/crdsdev/doc/pkg/models"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-redis/redis/v7"
@@ -158,7 +160,7 @@ func gitter(repos []string, r *redis.Client) error {
 	return nil
 }
 
-func getCRDsFromTag(repo string, dir string, tag string, hash *plumbing.Hash, w *git.Worktree) (map[string]string, map[string]interface{}, error) {
+func getCRDsFromTag(repo string, dir string, tag string, hash *plumbing.Hash, w *git.Worktree) (*models.Repo, map[string]interface{}, error) {
 	log.Printf("Getting CRDs for tag (%s) at commit (%s)", tag, hash.String())
 
 	err := w.Checkout(&git.CheckoutOptions{
@@ -174,7 +176,11 @@ func getCRDsFromTag(repo string, dir string, tag string, hash *plumbing.Hash, w 
 		Patterns:  []*regexp.Regexp{reg},
 		PathSpecs: []*regexp.Regexp{regPath},
 	})
-	repoCrds := map[string]string{}
+	repoData := &models.Repo{
+		GithubURL:  "github.com" + "/" + repo,
+		Tag:        tag,
+		LastParsed: time.Now(),
+	}
 	crds := map[string]interface{}{}
 	for _, res := range g {
 		b, err := ioutil.ReadFile(dir + "/" + res.FileName)
@@ -194,21 +200,28 @@ func getCRDsFromTag(repo string, dir string, tag string, hash *plumbing.Hash, w 
 			log.Printf("failed to marshal CRD: %s/%s, %v", res.FileName, tag, err)
 			continue
 		}
-
-		repoCrds[res.FileName] = path.Base(res.FileName)
+		repoData.CRDs = append(repoData.CRDs, models.RepoCRD{
+			Path:     res.FileName,
+			Filename: path.Base(res.FileName),
+			CRD:      crder.CRD,
+		})
 		crds["github.com"+"/"+repo+"/"+res.FileName+"@"+tag] = bytes
 	}
-	return repoCrds, crds, nil
+	return repoData, crds, nil
 }
 
-func getCRDsFromMaster(repo string, dir string, w *git.Worktree) (map[string]string, map[string]interface{}, error) {
+func getCRDsFromMaster(repo string, dir string, w *git.Worktree) (*models.Repo, map[string]interface{}, error) {
 	reg := regexp.MustCompile("kind: CustomResourceDefinition")
 	regPath := regexp.MustCompile("^.*\\.yaml")
 	g, _ := w.Grep(&git.GrepOptions{
 		Patterns:  []*regexp.Regexp{reg},
 		PathSpecs: []*regexp.Regexp{regPath},
 	})
-	repoCrds := map[string]string{}
+	repoData := &models.Repo{
+		GithubURL:  "github.com" + "/" + repo,
+		Tag:        "master",
+		LastParsed: time.Now(),
+	}
 	crds := map[string]interface{}{}
 	for _, res := range g {
 		b, err := ioutil.ReadFile(dir + "/" + res.FileName)
@@ -229,8 +242,12 @@ func getCRDsFromMaster(repo string, dir string, w *git.Worktree) (map[string]str
 			continue
 		}
 
-		repoCrds[res.FileName] = path.Base(res.FileName)
+		repoData.CRDs = append(repoData.CRDs, models.RepoCRD{
+			Path:     res.FileName,
+			Filename: path.Base(res.FileName),
+			CRD:      crder.CRD,
+		})
 		crds["github.com"+"/"+repo+"/"+res.FileName] = bytes
 	}
-	return repoCrds, crds, nil
+	return repoData, crds, nil
 }
