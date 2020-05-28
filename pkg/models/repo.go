@@ -18,8 +18,6 @@ package models
 
 import (
 	"time"
-
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 )
 
 // Repo is data for a Github repo.
@@ -34,5 +32,7 @@ type Repo struct {
 type RepoCRD struct {
 	Path     string
 	Filename string
-	CRD      *apiextensions.CustomResourceDefinition
+	Group    string
+	Version  string
+	Kind     string
 }

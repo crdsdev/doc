@@ -203,7 +203,9 @@ func getCRDsFromTag(repo string, dir string, tag string, hash *plumbing.Hash, w 
 		repoData.CRDs = append(repoData.CRDs, models.RepoCRD{
 			Path:     res.FileName,
 			Filename: path.Base(res.FileName),
-			CRD:      crder.CRD,
+			Group:    crder.CRD.Spec.Group,
+			Version:  crder.CRD.Spec.Version,
+			Kind:     crder.CRD.Spec.Names.Kind,
 		})
 		crds["github.com"+"/"+repo+"/"+res.FileName+"@"+tag] = bytes
 	}
@@ -245,7 +247,9 @@ func getCRDsFromMaster(repo string, dir string, w *git.Worktree) (*models.Repo, 
 		repoData.CRDs = append(repoData.CRDs, models.RepoCRD{
 			Path:     res.FileName,
 			Filename: path.Base(res.FileName),
-			CRD:      crder.CRD,
+			Group:    crder.CRD.Spec.Group,
+			Version:  crder.CRD.Spec.Version,
+			Kind:     crder.CRD.Spec.Names.Kind,
 		})
 		crds["github.com"+"/"+repo+"/"+res.FileName] = bytes
 	}
