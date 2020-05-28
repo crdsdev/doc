@@ -35,7 +35,7 @@
         <div class="table-responsive">
             <table class="table">
                 {{ range $i, $crd := .CRDs }}
-                <tr><td><a href="/github.com/{{ $.Repo }}/{{ $crd.Path }}{{ $.At }}{{ $.Tag }}">{{ $crd.CRD.Spec.Names.Kind }}</a></td><td>{{ $crd.CRD.Spec.Group }}/{{ $crd.CRD.Spec.Version }}</td></tr>
+                <tr><td><a href="/github.com/{{ $.Repo }}/{{ $crd.Path }}{{ $.At }}{{ $.Tag }}">{{ $crd.Kind }}</a></td><td>{{ $crd.Group }}/{{ $crd.Version }}</td></tr>
                 {{ end }}
             </table>
         </div>
