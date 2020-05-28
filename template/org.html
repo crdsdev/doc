@@ -12,6 +12,8 @@
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/bootstrap-table@1.16.0/dist/bootstrap-table.min.css">
+    <script src="https://unpkg.com/bootstrap-table@1.16.0/dist/bootstrap-table.min.js"></script>
 </head>
 
 <body style="padding-top: 50px;">
@@ -33,10 +35,21 @@
         <h3>CRDs discovered: <b>{{ .Total }}</b></h3>
         <p><b>Last parsed:</b> {{ .LastParsed }}</p>
         <div class="table-responsive">
-            <table class="table">
-                {{ range $i, $crd := .CRDs }}
-                <tr><td><a href="/github.com/{{ $.Repo }}/{{ $crd.Path }}{{ $.At }}{{ $.Tag }}">{{ $crd.Kind }}</a></td><td>{{ $crd.Group }}/{{ $crd.Version }}</td></tr>
-                {{ end }}
+            <table class="table" data-toggle="table" data-sort-name="group" data-sort-order="asc">
+                <thead>
+                    <th data-field="kind" data-sortable="true">Kind</th>
+                    <th data-field="group" data-sortable="true">Group</th>
+                    <th data-field="version" data-sortable="true">Version</th>
+                </thead>
+                <tbody>
+                    {{ range $i, $crd := .CRDs }}
+                    <tr>
+                        <td><a href="/github.com/{{ $.Repo }}/{{ $crd.Path }}{{ $.At }}{{ $.Tag }}">{{ $crd.Kind }}</a></td>
+                        <td>{{ $crd.Group }}</td>
+                        <td>{{ $crd.Version }}</td>
+                    </tr>
+                    {{ end }}
+                </tbody>
             </table>
         </div>
     </div>
