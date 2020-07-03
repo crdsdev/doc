@@ -197,3 +197,9 @@ func StripConversion() Modifier {
 		crd.Spec.Conversion = nil
 	}
 }
+
+// PrettyGVK returns a group, version, kind representation in order of
+// specificity.
+func PrettyGVK(gvk *schema.GroupVersionKind) string {
+	return fmt.Sprintf("%s/%s/%s", gvk.Group, gvk.Kind, gvk.Version)
+}

@@ -84,7 +84,7 @@ type orgData struct {
 	Repo       string
 	Tag        string
 	At         string
-	CRDs       []models.RepoCRD
+	CRDs       map[string]models.RepoCRD
 	Total      int
 	LastParsed string
 }
