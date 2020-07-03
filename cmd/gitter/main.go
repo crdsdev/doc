@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -180,34 +181,32 @@ func getCRDsFromTag(repo string, dir string, tag string, hash *plumbing.Hash, w 
 		GithubURL:  "github.com" + "/" + repo,
 		Tag:        tag,
 		LastParsed: time.Now(),
+		CRDs:       map[string]models.RepoCRD{},
 	}
 	crds := map[string]interface{}{}
-	for _, res := range g {
-		b, err := ioutil.ReadFile(dir + "/" + res.FileName)
-		if err != nil {
-			log.Printf("failed to read CRD file: %v", err)
-			continue
-		}
+	files := splitYAML(g, dir)
+	for file, yamls := range files {
+		for _, y := range yamls {
+			crder, err := crd.NewCRDer(y, crd.StripLabels(), crd.StripAnnotations(), crd.StripConversion())
+			if err != nil || crder.CRD == nil {
+				log.Printf("failed to convert to CRD: %v", err)
+				continue
+			}
 
-		crder, err := crd.NewCRDer([]byte(b), crd.StripLabels(), crd.StripAnnotations(), crd.StripConversion())
-		if err != nil || crder.CRD == nil {
-			log.Printf("failed to convert to CRD: %v", err)
-			continue
+			bytes, err := json.Marshal(crder.CRD)
+			if err != nil {
+				log.Printf("failed to marshal CRD in: %s/%s, %v", file, tag, err)
+				continue
+			}
+			repoData.CRDs[crd.PrettyGVK(crder.GVK)] = models.RepoCRD{
+				Path:     crd.PrettyGVK(crder.GVK),
+				Filename: path.Base(file),
+				Group:    crder.CRD.Spec.Group,
+				Version:  crder.CRD.Spec.Version,
+				Kind:     crder.CRD.Spec.Names.Kind,
+			}
+			crds["github.com"+"/"+repo+"/"+crd.PrettyGVK(crder.GVK)+"@"+tag] = bytes
 		}
-
-		bytes, err := json.Marshal(crder.CRD)
-		if err != nil {
-			log.Printf("failed to marshal CRD: %s/%s, %v", res.FileName, tag, err)
-			continue
-		}
-		repoData.CRDs = append(repoData.CRDs, models.RepoCRD{
-			Path:     res.FileName,
-			Filename: path.Base(res.FileName),
-			Group:    crder.CRD.Spec.Group,
-			Version:  crder.CRD.Spec.Version,
-			Kind:     crder.CRD.Spec.Names.Kind,
-		})
-		crds["github.com"+"/"+repo+"/"+res.FileName+"@"+tag] = bytes
 	}
 	return repoData, crds, nil
 }
@@ -223,35 +222,46 @@ func getCRDsFromMaster(repo string, dir string, w *git.Worktree) (*models.Repo, 
 		GithubURL:  "github.com" + "/" + repo,
 		Tag:        "master",
 		LastParsed: time.Now(),
+		CRDs:       map[string]models.RepoCRD{},
 	}
 	crds := map[string]interface{}{}
-	for _, res := range g {
+	files := splitYAML(g, dir)
+	for file, yamls := range files {
+		for _, y := range yamls {
+			crder, err := crd.NewCRDer(y, crd.StripLabels(), crd.StripAnnotations(), crd.StripConversion())
+			if err != nil || crder.CRD == nil {
+				log.Printf("failed to convert to CRD: %v", err)
+				continue
+			}
+
+			bytes, err := json.Marshal(crder.CRD)
+			if err != nil {
+				log.Printf("failed to marshal CRD in: %s/%s, %v", file, "master", err)
+				continue
+			}
+
+			repoData.CRDs[crd.PrettyGVK(crder.GVK)] = models.RepoCRD{
+				Path:     crd.PrettyGVK(crder.GVK),
+				Filename: path.Base(file),
+				Group:    crder.CRD.Spec.Group,
+				Version:  crder.CRD.Spec.Version,
+				Kind:     crder.CRD.Spec.Names.Kind,
+			}
+			crds["github.com"+"/"+repo+"/"+crd.PrettyGVK(crder.GVK)] = bytes
+		}
+	}
+	return repoData, crds, nil
+}
+
+func splitYAML(greps []git.GrepResult, dir string) map[string][][]byte {
+	allCRDs := map[string][][]byte{}
+	for _, res := range greps {
 		b, err := ioutil.ReadFile(dir + "/" + res.FileName)
 		if err != nil {
 			log.Printf("failed to read CRD file: %s", res.FileName)
 			continue
 		}
-
-		crder, err := crd.NewCRDer([]byte(b), crd.StripLabels(), crd.StripAnnotations(), crd.StripConversion())
-		if err != nil || crder.CRD == nil {
-			log.Printf("failed to convert to CRD: %v", err)
-			continue
-		}
-
-		bytes, err := json.Marshal(crder.CRD)
-		if err != nil {
-			log.Printf("failed to marshal CRD: %s/%s, %v", res.FileName, "master", err)
-			continue
-		}
-
-		repoData.CRDs = append(repoData.CRDs, models.RepoCRD{
-			Path:     res.FileName,
-			Filename: path.Base(res.FileName),
-			Group:    crder.CRD.Spec.Group,
-			Version:  crder.CRD.Spec.Version,
-			Kind:     crder.CRD.Spec.Names.Kind,
-		})
-		crds["github.com"+"/"+repo+"/"+res.FileName] = bytes
+		allCRDs[res.FileName] = bytes.Split(b, []byte("---"))
 	}
-	return repoData, crds, nil
+	return allCRDs
 }

@@ -25,7 +25,7 @@ type Repo struct {
 	GithubURL  string
 	Tag        string
 	LastParsed time.Time
-	CRDs       []RepoCRD
+	CRDs       map[string]RepoCRD
 }
 
 // RepoCRD is a CRD and data about its location in a repository.
