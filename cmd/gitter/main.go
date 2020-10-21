@@ -171,6 +171,11 @@ func getCRDsFromTag(repo string, dir string, tag string, hash *plumbing.Hash, w 
 	if err != nil {
 		return nil, nil, err
 	}
+	if err := w.Reset(&git.ResetOptions{
+		Mode: git.HardReset,
+	}); err != nil {
+		return nil, nil, err
+	}
 	reg := regexp.MustCompile("kind: CustomResourceDefinition")
 	regPath := regexp.MustCompile("^.*\\.yaml")
 	g, _ := w.Grep(&git.GrepOptions{
