@@ -266,6 +266,8 @@ func splitYAML(greps []git.GrepResult, dir string) map[string][][]byte {
 			log.Printf("failed to read CRD file: %s", res.FileName)
 			continue
 		}
+		// TODO(hasheddan): generalize this replacement
+		b = bytes.ReplaceAll(b, []byte("rw-rw----"), []byte("660"))
 		allCRDs[res.FileName] = bytes.Split(b, []byte("---"))
 	}
 	return allCRDs
