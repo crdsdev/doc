@@ -30,6 +30,7 @@ import (
 
 	"github.com/crdsdev/doc/pkg/models"
 	"github.com/go-redis/redis"
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	flag "github.com/spf13/pflag"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
@@ -163,6 +164,31 @@ func raw(w http.ResponseWriter, r *http.Request) {
 
 	w.Write([]byte(res))
 	log.Printf("successfully rendered raw CRDs")
+
+	if analytics {
+		u := uuid.New().String()
+		// TODO(hasheddan): do not hardcode tid and dh
+		metrics := url.Values{
+			"v":   {"1"},
+			"t":   {"pageview"},
+			"tid": {"UA-116820283-2"},
+			"cid": {u},
+			"dh":  {"doc.crds.dev"},
+			"dp":  {r.URL.Path},
+			"uip": {r.RemoteAddr},
+		}
+		client := &http.Client{}
+
+		req, _ := http.NewRequest("POST", "http://www.google-analytics.com/collect", strings.NewReader(metrics.Encode()))
+		req.Header.Add("User-Agent", r.UserAgent())
+		req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+
+		if _, err := client.Do(req); err != nil {
+			log.Printf("failed to report analytics: %s", err.Error())
+		} else {
+			log.Printf("successfully reported analytics")
+		}
+	}
 }
 
 func org(w http.ResponseWriter, r *http.Request) {
