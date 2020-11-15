@@ -53,7 +53,7 @@ type SchemaPlusParent struct {
 	Schema map[string]apiextensions.JSONSchemaProps
 }
 
-var docTemplate = template.Must(template.New("doc.html").Funcs(
+var pages = template.Must(template.New("").Funcs(
 	template.FuncMap{
 		"plusParent": func(p string, s map[string]apiextensions.JSONSchemaProps) *SchemaPlusParent {
 			return &SchemaPlusParent{
@@ -62,11 +62,7 @@ var docTemplate = template.Must(template.New("doc.html").Funcs(
 			}
 		},
 	},
-).ParseFiles("template/doc.html", "template/analytics.html", "template/twitter.html"))
-
-var orgTemplate = template.Must(template.ParseFiles("template/org.html", "template/analytics.html", "template/twitter.html"))
-var newTemplate = template.Must(template.ParseFiles("template/new.html", "template/analytics.html", "template/twitter.html"))
-var homeTemplate = template.Must(template.ParseFiles("template/home.html", "template/analytics.html", "template/twitter.html"))
+).ParseGlob("template/*.html"))
 
 type docData struct {
 	Analytics   bool
@@ -139,7 +135,7 @@ func home(w http.ResponseWriter, r *http.Request) {
 	} else {
 		data.Repos = res
 	}
-	if err := homeTemplate.Execute(w, data); err != nil {
+	if err := pages.ExecuteTemplate(w, "home.html", data); err != nil {
 		log.Printf("homeTemplate.Execute(): %v", err)
 		fmt.Fprint(w, "Unable to render home template.")
 		return
@@ -203,7 +199,7 @@ func org(w http.ResponseWriter, r *http.Request) {
 	res, err := redisClient.Get(strings.Join([]string{"github.com", org, repo}, "/") + at + tag).Result()
 	if err != nil {
 		log.Printf("failed to get CRDs for %s : %v", repo, err)
-		if err := newTemplate.Execute(w, newData{Analytics: analytics}); err != nil {
+		if err := pages.ExecuteTemplate(w, "new.html", newData{Analytics: analytics}); err != nil {
 			log.Printf("newTemplate.Execute(): %v", err)
 			fmt.Fprint(w, "Unable to render new template.")
 		}
@@ -217,7 +213,7 @@ func org(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "template/home.html")
 		return
 	}
-	if err := orgTemplate.Execute(w, orgData{
+	if err := pages.ExecuteTemplate(w, "org.html", orgData{
 		Analytics:  analytics,
 		Repo:       strings.Join([]string{org, repo}, "/"),
 		Tag:        tag,
@@ -250,7 +246,7 @@ func doc(w http.ResponseWriter, r *http.Request) {
 	res, err := redisClient.Get(strings.Trim(r.URL.Path, "/")).Result()
 	if err != nil {
 		log.Printf("failed to get CRDs for %s : %v", repo, err)
-		if err := newTemplate.Execute(w, newData{Analytics: analytics}); err != nil {
+		if err := pages.ExecuteTemplate(w, "doc.html", newData{Analytics: analytics}); err != nil {
 			log.Printf("newTemplate.Execute(): %v", err)
 			fmt.Fprint(w, "Unable to render new template.")
 		}
@@ -281,7 +277,7 @@ func doc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := docTemplate.Execute(w, docData{
+	if err := pages.ExecuteTemplate(w, "doc.html", docData{
 		Analytics:   analytics,
 		Repo:        strings.Join([]string{org, repo}, "/"),
 		Tag:         tag,

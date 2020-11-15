@@ -3,40 +3,15 @@
 
 <head>
     <title>Doc</title>
-    <link rel="icon" type="image/png" href="/static/favicon.ico?v=1" />
-    {{ if .Analytics}}
-    {{ template "analytics" }}
-    {{ end }}
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    {{ template "twitter" }}
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
-    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
-    <style>
-        body {
-            background-color: black;
-        }
-        h1, h3, p, a {
-            color: white;
-        }
-        a {
-            text-decoration: underline;
-            text-decoration-style: solid;
-        }
-        a:hover {
-            color: blue;
-        }
-    </style>
+    {{ template "_head.html" . }}
+    <link rel="stylesheet" href="/static/root.css">
 </head>
 
-<body>
-
+<!-- Turn on Dark Mode by default -->
+<body class="dark-mode">
     <div class="container">
-        <h1 class="text-center">doc.crds.dev</h1>          
-        <div class="input-group input-group-lg">
-            <input id="path_box" type="text" class="form-control" placeholder="github.com/crossplane/provider-gcp" aria-describedby="sizing-addon1">
-            <span class="input-group-addon" id="sizing-addon1" onclick="location.href=('/'+document.getElementById('path_box').value)">Go</span>
-          </div>
+        <h1 class="text-center">doc.crds.dev</h1>
+        <div id="repo_go"></div>
         <p class="text-center">doc.crds.dev is and always will be <a href="https://github.com/crdsdev/doc">free and open source</a>.</p>
         <p>To find a repo, search <kbd>github.com/{org}/{repo}</kbd>. You may optionally append <kbd>@{version}</kbd> to view documentation for a specific version of the project. For example: <a href="/github.com/crossplane/crossplane@v0.10.0">github.com/crossplane/crossplane@v0.10.0</a>. If you do not include a tag, the latest from <kbd>master</kbd> will be served.</p>
         {{ if gt (len .Repos) 0}}
@@ -47,15 +22,45 @@
         {{ end }}
     </div>
 
-    <script>
-        $('#path_box').keypress(function (event) {
-                var keycode = (event.keyCode ? event.keyCode : event.which);
-                if (keycode == '13') {
-                    $('#sizing-addon1').click();
+    <script type="module">
+        import { html, render, useState, useEffect, useRef } from 'https://unpkg.com/htm/preact/standalone.module.js';
+
+        function RepoGo() {
+            const [url, setUrl] = useState('');
+            const input = useRef(null);
+
+            const onSubmit = e => {
+              window.location.assign(`/${url}`);
+              e.preventDefault();
+            };
+
+            useEffect(() => {
+                halfmoon.keydownHandler = e => {
+                    if (!(document.querySelector("input:focus") || document.querySelector("textarea:focus") || document.querySelector("select:focus"))) {
+                        // Focus the repository search input when [/] is pressed
+                        if (event.which == 191) {
+                            input.current && input.current.focus();
+                            e.preventDefault();
+                        }
+                    }
                 }
-            });
+            }, []);
+
+            return html`
+            <form class="input-group input-group-lg" onSubmit=${onSubmit}>
+                <div class="input-group-prepend">
+                    <span class="input-group-text"><kbd class="ml-5">/</kbd></span>
+                </div>
+                <input ref=${input} type="text" class="form-control" placeholder="github.com/crossplane/provider-gcp" onInput=${e => setUrl(e.target.value)} value=${url} />
+                <div class="input-group-append">
+                    <button class="btn btn-primary" type="search">Go</span>
+                </div>
+            </form>`;
+        }
+        render(html`<${RepoGo} />`, document.getElementById("repo_go"));
     </script>
 
+    {{ template "_footer.html" . }}
 </body>
 
 </html>
