@@ -125,6 +125,8 @@ func start() {
 	r.PathPrefix("/static/").Handler(staticHandler)
 	r.HandleFunc("/github.com/{org}/{repo}@{tag}", org)
 	r.HandleFunc("/github.com/{org}/{repo}", org)
+	r.HandleFunc("/raw/github.com/{org}/{repo}@{tag}", raw)
+	r.HandleFunc("/raw/github.com/{org}/{repo}", raw)
 	r.PathPrefix("/").HandlerFunc(doc)
 	log.Fatal(http.ListenAndServe(":5000", r))
 }
@@ -142,6 +144,25 @@ func home(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Print("successfully rendered home page")
+}
+
+func raw(w http.ResponseWriter, r *http.Request) {
+	parameters := mux.Vars(r)
+	org := parameters["org"]
+	repo := parameters["repo"]
+	tag := parameters["tag"]
+	at := ""
+	if tag != "" {
+		at = "@"
+	}
+	res, err := redisClient.Get(strings.Join([]string{"raw/github.com", org, repo}, "/") + at + tag).Result()
+	if err != nil {
+		log.Printf("failed to get raw CRDs for %s : %v", repo, err)
+		fmt.Fprint(w, "Unable to render raw CRDs.")
+	}
+
+	w.Write([]byte(res))
+	log.Printf("successfully rendered raw CRDs")
 }
 
 func org(w http.ResponseWriter, r *http.Request) {
