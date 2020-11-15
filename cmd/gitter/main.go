@@ -108,7 +108,7 @@ func gitter(repos []string, r *redis.Client) error {
 		}
 
 		// Get master
-		repoCrds, crds, err := getCRDsFromMaster(repoURL, dir, w)
+		repoCrds, crds, raw, err := getCRDsFromMaster(repoURL, dir, w)
 		if err != nil {
 			log.Printf("Unable to get CRDs: %s@%s", repoURL, "master")
 			return err
@@ -125,6 +125,10 @@ func gitter(repos []string, r *redis.Client) error {
 			log.Printf("Unable to set CRD list for %s@%s", repoURL, "master")
 			return err.Err()
 		}
+		if err := r.Set("raw/"+"github.com"+"/"+repoURL, raw, 0); err.Err() != nil {
+			log.Printf("Unable to set raw CRDs for %s@%s", repoURL, "master")
+			return err.Err()
+		}
 
 		// Get tags
 		if err := iter.ForEach(func(obj *plumbing.Reference) error {
@@ -132,7 +136,7 @@ func gitter(repos []string, r *redis.Client) error {
 			if err != nil || h == nil {
 				log.Printf("Unable to resolve revision: %s (%v)", obj.Hash().String(), err)
 			}
-			repoCrds, crds, err := getCRDsFromTag(repoURL, dir, obj.Name().Short(), h, w)
+			repoCrds, crds, raw, err := getCRDsFromTag(repoURL, dir, obj.Name().Short(), h, w)
 			if err != nil {
 				log.Printf("Unable to get CRDs: %s@%s (%v)", repoURL, obj.Name().Short(), err)
 				return nil
@@ -151,6 +155,12 @@ func gitter(repos []string, r *redis.Client) error {
 				log.Printf("Unable to set CRD list for %s@%s", repoURL, obj.Name().Short())
 				return err.Err()
 			}
+
+			if err := r.Set("raw/"+"github.com"+"/"+repoURL+"@"+obj.Name().Short(), raw, 0); err.Err() != nil {
+				log.Printf("Unable to set raw CRDs for %s@%s", repoURL, "master")
+				return err.Err()
+			}
+
 			return nil
 		}); err != nil {
 			log.Printf("Failed indexing %s, continuing to other repos: %v", repoURL, err)
@@ -161,7 +171,7 @@ func gitter(repos []string, r *redis.Client) error {
 	return nil
 }
 
-func getCRDsFromTag(repo string, dir string, tag string, hash *plumbing.Hash, w *git.Worktree) (*models.Repo, map[string]interface{}, error) {
+func getCRDsFromTag(repo string, dir string, tag string, hash *plumbing.Hash, w *git.Worktree) (*models.Repo, map[string]interface{}, []byte, error) {
 	log.Printf("Getting CRDs for tag (%s) at commit (%s)", tag, hash.String())
 
 	err := w.Checkout(&git.CheckoutOptions{
@@ -169,12 +179,12 @@ func getCRDsFromTag(repo string, dir string, tag string, hash *plumbing.Hash, w 
 		Force: true,
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if err := w.Reset(&git.ResetOptions{
 		Mode: git.HardReset,
 	}); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	reg := regexp.MustCompile("kind: CustomResourceDefinition")
 	regPath := regexp.MustCompile("^.*\\.yaml")
@@ -189,20 +199,30 @@ func getCRDsFromTag(repo string, dir string, tag string, hash *plumbing.Hash, w 
 		CRDs:       map[string]models.RepoCRD{},
 	}
 	crds := map[string]interface{}{}
+	raw := []byte{}
 	files := splitYAML(g, dir)
+	numFiles := len(files)
+	fileCount := 0
 	for file, yamls := range files {
-		for _, y := range yamls {
+		numYAMLs := len(yamls)
+		for i, y := range yamls {
 			crder, err := crd.NewCRDer(y, crd.StripLabels(), crd.StripAnnotations(), crd.StripConversion())
 			if err != nil || crder.CRD == nil {
 				log.Printf("failed to convert to CRD: %v", err)
 				continue
 			}
 
-			bytes, err := json.Marshal(crder.CRD)
+			cbytes, err := json.Marshal(crder.CRD)
 			if err != nil {
 				log.Printf("failed to marshal CRD in: %s/%s, %v", file, tag, err)
 				continue
 			}
+
+			raw = append(raw, bytes.TrimRight(bytes.TrimLeft(y, "\n"), "\n")...)
+			if i != numYAMLs-1 || fileCount != numFiles-1 {
+				raw = append(raw, []byte("\n---\n")...)
+			}
+
 			repoData.CRDs[crd.PrettyGVK(crder.GVK)] = models.RepoCRD{
 				Path:     crd.PrettyGVK(crder.GVK),
 				Filename: path.Base(file),
@@ -210,13 +230,14 @@ func getCRDsFromTag(repo string, dir string, tag string, hash *plumbing.Hash, w 
 				Version:  crder.CRD.Spec.Version,
 				Kind:     crder.CRD.Spec.Names.Kind,
 			}
-			crds["github.com"+"/"+repo+"/"+crd.PrettyGVK(crder.GVK)+"@"+tag] = bytes
+			crds["github.com"+"/"+repo+"/"+crd.PrettyGVK(crder.GVK)+"@"+tag] = cbytes
 		}
+		fileCount++
 	}
-	return repoData, crds, nil
+	return repoData, crds, raw, nil
 }
 
-func getCRDsFromMaster(repo string, dir string, w *git.Worktree) (*models.Repo, map[string]interface{}, error) {
+func getCRDsFromMaster(repo string, dir string, w *git.Worktree) (*models.Repo, map[string]interface{}, []byte, error) {
 	reg := regexp.MustCompile("kind: CustomResourceDefinition")
 	regPath := regexp.MustCompile("^.*\\.yaml")
 	g, _ := w.Grep(&git.GrepOptions{
@@ -230,19 +251,28 @@ func getCRDsFromMaster(repo string, dir string, w *git.Worktree) (*models.Repo, 
 		CRDs:       map[string]models.RepoCRD{},
 	}
 	crds := map[string]interface{}{}
+	raw := []byte{}
 	files := splitYAML(g, dir)
+	numFiles := len(files)
+	fileCount := 0
 	for file, yamls := range files {
-		for _, y := range yamls {
+		numYAMLs := len(yamls)
+		for i, y := range yamls {
 			crder, err := crd.NewCRDer(y, crd.StripLabels(), crd.StripAnnotations(), crd.StripConversion())
 			if err != nil || crder.CRD == nil {
 				log.Printf("failed to convert to CRD: %v", err)
 				continue
 			}
 
-			bytes, err := json.Marshal(crder.CRD)
+			cbytes, err := json.Marshal(crder.CRD)
 			if err != nil {
 				log.Printf("failed to marshal CRD in: %s/%s, %v", file, "master", err)
 				continue
+			}
+
+			raw = append(raw, bytes.TrimRight(bytes.TrimLeft(y, "\n"), "\n")...)
+			if i != numYAMLs-1 || fileCount != numFiles-1 {
+				raw = append(raw, []byte("\n---\n")...)
 			}
 
 			repoData.CRDs[crd.PrettyGVK(crder.GVK)] = models.RepoCRD{
@@ -252,10 +282,11 @@ func getCRDsFromMaster(repo string, dir string, w *git.Worktree) (*models.Repo, 
 				Version:  crder.CRD.Spec.Version,
 				Kind:     crder.CRD.Spec.Names.Kind,
 			}
-			crds["github.com"+"/"+repo+"/"+crd.PrettyGVK(crder.GVK)] = bytes
+			crds["github.com"+"/"+repo+"/"+crd.PrettyGVK(crder.GVK)] = cbytes
 		}
+		fileCount++
 	}
-	return repoData, crds, nil
+	return repoData, crds, raw, nil
 }
 
 func splitYAML(greps []git.GrepResult, dir string) map[string][][]byte {
