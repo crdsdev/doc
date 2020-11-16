@@ -5,32 +5,31 @@
 </style>
 <div class="content-wrapper">
     <div class="container">
-        <div class="crd-label">
-            <span class="crd-type">Kind</span>
-            <span class="crd-value">{{ .Kind }}</span>
-        </div>
-        <h3><span class="label label-primary">Group</span> <code>{{ .Group }}</code></h3>
-        <h3><span class="label label-primary">Version</span> <code>{{ .Version }}</code></h3>
-        <h3><span class="label label-primary">Kind</span> <code>{{ .Kind }}</code></h3>
-        <h3>{{ .Description }}</h3>
-        <hr />
-        <div class="panel-group" id="accordion">
-            {{ if gt (len .Schema.Properties) 0}}
-            {{ template "field" (plusParent "" .Schema.Properties) }}
-            {{ end }}
-        </div>
     </div>
 </div>
 
 {{ template "_scripts" . }}
-<script src="https://unpkg.com/prismjs@1/components/prism-core.min.js"></script>
-<script src="https://unpkg.com/prismjs@1/plugins/autoloader/prism-autoloader.min.js"></script>
+<script src="https://unpkg.com/marked@1.2.4/marked.min.js"></script> 
+<script src="https://unpkg.com/dompurify@2.2.2/dist/purify.js"></script> 
+<script src="https://unpkg.com/eventemitter3@latest/umd/eventemitter3.min.js"></script>
 <script id="pageData" type="application/json">
     {{ . }}
 </script>
 <script type="module">
     const { render } = ReactDOM;
+    const { useMemo, useState, useEffect, useCallback } = React;
     const { html } = htmReact;
+    const bus = new EventEmitter3();
+    window.bus = bus;
+
+    marked.setOptions({
+        highlight: (code, lang, callback) => {
+            try {
+                const result = Prism.highlight(code, Prism.languages[lang], lang);
+                callback(null, result);
+            } catch (e) { callback(e, undefined) }
+        }
+    })
 
     const { Kind, Group, Version, Schema } = JSON.parse(document.getElementById('pageData').textContent);
 
@@ -38,9 +37,10 @@
     if (properties.apiVersion) delete properties.apiVersion;
     if (properties.kind) delete properties.kind;
     if (properties.metadata && properties.metadata.Type == "object") delete properties.metadata;
-    console.debug({ properties });
 
     function CRD() {
+        const expandAll = useCallback(() => bus.emit('expand-all'), []);
+        const collapseAll = useCallback(() => bus.emit('collapse-all'), []);
         return html`
             <${PartLabel} type="Kind" value=${Kind} />
             <${PartLabel} type="Group" value=${Group} />
@@ -48,6 +48,10 @@
 
             <pre><code class="language-yaml">${`apiVersion: ${Group}/${Version}\nkind: ${Kind}`}</code></pre>
 
+            <div class="d-flex flex-row-reverse mb-10 mt-10">
+                <button class="btn ml-10" type="button" onClick=${expandAll}>+ expand all</button>
+                <button class="btn" type="button" onClick=${collapseAll}>- collapse all</button>
+            </div>
             <div class="collapse-group">
             ${Object.keys(properties).map(prop => SchemaPart({ key: prop, property: properties[prop] }))}
             </div>
@@ -55,22 +59,38 @@
     }
 
     function SchemaPart({ key, property, parent }) {
-        const props = property.Properties || {};
-        const propKeys = Object.keys(props);
+        const [props, propKeys, required] = useMemo(() => {
+            const props = property.Properties || {};
+            const propKeys = Object.keys(props);
 
-        let required = false;
-        if (parent && parent.Required && parent.Required.includes(key)) {
-            required = true;
-        }
+            let required = false;
+            if (parent && parent.Required && parent.Required.includes(key)) {
+                required = true;
+            }
+            return [props, propKeys, required]
+        }, [parent, property]);
+
+        const [isOpen, setIsOpen] = useState(key == "spec" && !parent);
+        
+        useEffect(() => {
+            const collapse = () => setIsOpen(false);
+            const expand = () => setIsOpen(true);
+            bus.on('collapse-all', collapse);
+            bus.on('expand-all', expand);
+            return () => {
+                bus.off('collapse-all', collapse);
+                bus.off('expand-all', expand);
+            };
+        }, []);
 
         return html`
-        <details class="collapse-panel" open="${key == "spec"}">
+        <details class="collapse-panel" open="${isOpen}" onToggle=${e => { setIsOpen(e.target.open); e.stopPropagation(); }}>
             <summary class="collapse-header">
                 ${key} <kbd class="text-muted">${property.Type}</kbd> ${required ? html`<kbd class="text-muted">required</kbd>` : ''}
             </summary>
             <div class="collapse-content">
-                ${property.Description}
-                ${propKeys.length > 0 ? html`<br /><br />` : ''}
+                ${React.createElement("div", { dangerouslySetInnerHTML: { __html: DOMPurify.sanitize(marked.parseInline(property.Description)) } })}
+                ${propKeys.length > 0 ? html`<br />` : ''}
                 ${propKeys
                         .map(key => SchemaPart({ parent: property, key, property: props[key] }))}
             </div>
@@ -88,73 +108,5 @@
 
     render(html`<${CRD} />`, document.querySelector('.container'));
 </script>
-
-{{define "field"}}
-{{ $parent := .Parent }}
-{{ range $key, $value := .Schema }}
-{{ $identifier := $key }}
-{{if ne $parent ""}}
-{{ $identifier = (print $parent "-" $key)}} 
-{{ end }}
-<div id="{{ $identifier }}" class="panel panel-default">
-    <div class="panel-heading">
-        <h4 class="panel-title">
-            <a data-toggle="collapse" href='#{{ print "collapse" $identifier }}'>{{ $key }}</a>
-            <span onclick='copyLink("{{ $identifier}}")' class="glyphicon glyphicon-link" aria-hidden="true" style="float: right; cursor: pointer;"></span>
-        </h4>
-    </div>
-    <div id='{{ print "collapse" $identifier }}' class="panel-collapse collapse in">
-        <div class="panel-body">
-            <p>{{ $value.Description }}</p>
-            <p><span class="label label-primary">Type</span> <code>{{ $value.Type }}</code></p>
-            {{ if gt (len $value.Required) 0}}
-                <p>
-                    <span class="label label-primary">Required Fields</span>
-                    {{ range $req := $value.Required }}
-                        <code>{{ $req }}</code>
-                    {{ end }}
-                </p>
-            {{ end }}
-            {{ if $value.Enum }}
-            <p><span class="label label-primary">Permitted Values</span> <code>{{ $value.Enum }}</code></p>
-            {{ end }}
-            {{ if $value.Minimum }}
-            <p><span class="label label-primary">Permitted Values</span> <code>{{ $value.Minimum }}</code></p>
-            {{ end }}
-            {{ if $value.Maximum }}
-            <p><span class="label label-primary">Permitted Values</span> <code>{{ $value.Maximum }}</code></p>
-            {{ end }}
-            {{ if gt (len $value.Properties) 0 }}
-                {{ template "field" (plusParent $identifier $value.Properties) }}
-            {{ end }}
-            {{ if $value.AdditionalProperties }}
-                {{ if $value.AdditionalProperties.Allows }}
-                    <p><b>AdditionalProperties allowed.</b></p>
-                {{ end }}
-                {{ if $value.AdditionalProperties.Schema }}
-                    <p>{{ $value.AdditionalProperties.Schema.Description }}</p>
-                    <p><span class="label label-primary">Type</span> <code>{{ $value.AdditionalProperties.Schema.Type }}</code></p>
-                    {{ if gt (len $value.AdditionalProperties.Schema.Properties) 0}}
-                        {{ template "field" (plusParent $identifier $value.AdditionalProperties.Schema.Properties) }}
-                    {{ end }}
-                {{ end }}
-            {{ end }}
-            {{ if $value.Items }}
-                {{ if $value.Items.Schema }}
-                    <p>{{ $value.Items.Schema.Description }}</p>
-                    <p><span class="label label-primary">Type</span> <code>{{ $value.Items.Schema.Type }}</code></p>
-                    {{ if gt (len $value.Items.Schema.Properties) 0}}
-                        {{ template "field" (plusParent $identifier $value.Items.Schema.Properties) }}
-                    {{ end }}
-                {{ end }}
-                {{ if $value.Items.JSONSchemas }}
-                    {{ if gt ($value.Items.JSONSchemas) 0 }}
-                        {{ template "field" (plusParent $identifier $value.Items.JSONSchemas) }}
-                    {{ end }}
-                {{ end }}
-            {{ end }}
-        </div>
-    </div>
-</div>
-{{ end }}
-{{end}}
+<script defer src="https://unpkg.com/prismjs@1/components/prism-core.min.js"></script>
+<script defer src="https://unpkg.com/prismjs@1/plugins/autoloader/prism-autoloader.min.js"></script>
