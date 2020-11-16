@@ -1,18 +1,10 @@
-<!doctype html>
-<html>
-
-<head>
-    <title>Doc</title>
-    {{ template "_head.html" . }}
-    <link rel="stylesheet" href="/static/root.css">
-</head>
-
-<!-- Turn on Dark Mode by default -->
-<body class="dark-mode">
-    <div class="container">
-        <h1 class="text-center">doc.crds.dev</h1>
-        <div id="repo_go"></div>
-        <p class="text-center">doc.crds.dev is and always will be <a href="https://github.com/crdsdev/doc">free and open source</a>.</p>
+<div class="content-wrapper">
+    <div class="container mt-md-20">
+        <div class="content">
+            <h1 class="text-center">doc.crds.dev</h1>
+            <div id="repo_go"></div>
+            <p class="text-center">doc.crds.dev is and always will be <a href="https://github.com/crdsdev/doc">free and open source</a>.</p>
+        </div>
         <p>To find a repo, search <kbd>github.com/{org}/{repo}</kbd>. You may optionally append <kbd>@{version}</kbd> to view documentation for a specific version of the project. For example: <a href="/github.com/crossplane/crossplane@v0.10.0">github.com/crossplane/crossplane@v0.10.0</a>. If you do not include a tag, the latest from <kbd>master</kbd> will be served.</p>
         {{ if gt (len .Repos) 0}}
         <h3>Recently Viewed Projects</h3>
@@ -21,46 +13,41 @@
         <a href="/github.com/{{ $name }}"><h4>github.com/{{ $name }}</h4></a>
         {{ end }}
     </div>
+</div>
 
-    <script type="module">
-        import { html, render, useState, useEffect, useRef } from 'https://unpkg.com/htm/preact/standalone.module.js';
+<script type="module">
+    import { html, render, useState, useEffect, useRef } from 'https://unpkg.com/htm/preact/standalone.module.js';
+    function RepoGo() {
+        const [url, setUrl] = useState('');
+        const input = useRef(null);
 
-        function RepoGo() {
-            const [url, setUrl] = useState('');
-            const input = useRef(null);
+        const onSubmit = e => {
+            window.location.assign(`/${url}`);
+            e.preventDefault();
+        };
 
-            const onSubmit = e => {
-              window.location.assign(`/${url}`);
-              e.preventDefault();
-            };
-
-            useEffect(() => {
-                halfmoon.keydownHandler = e => {
-                    if (!(document.querySelector("input:focus") || document.querySelector("textarea:focus") || document.querySelector("select:focus"))) {
-                        // Focus the repository search input when [/] is pressed
-                        if (event.which == 191) {
-                            input.current && input.current.focus();
-                            e.preventDefault();
-                        }
+        useEffect(() => {
+            halfmoon.keydownHandler = e => {
+                if (!(document.querySelector("input:focus") || document.querySelector("textarea:focus") || document.querySelector("select:focus"))) {
+                    // Focus the repository search input when [/] is pressed
+                    if (event.which == 191) {
+                        input.current && input.current.focus();
+                        e.preventDefault();
                     }
                 }
-            }, []);
+            }
+        }, []);
 
-            return html`
-            <form class="input-group input-group-lg" onSubmit=${onSubmit}>
-                <div class="input-group-prepend">
-                    <span class="input-group-text"><kbd class="ml-5">/</kbd></span>
-                </div>
-                <input ref=${input} type="text" class="form-control" placeholder="github.com/crossplane/provider-gcp" onInput=${e => setUrl(e.target.value)} value=${url} />
-                <div class="input-group-append">
-                    <button class="btn btn-primary" type="search">Go</span>
-                </div>
-            </form>`;
-        }
-        render(html`<${RepoGo} />`, document.getElementById("repo_go"));
-    </script>
-
-    {{ template "_footer.html" . }}
-</body>
-
-</html>
+        return html`
+        <form class="input-group input-group-lg" onSubmit=${onSubmit}>
+            <div class="input-group-prepend">
+                <span class="input-group-text"><kbd class="ml-5">/</kbd></span>
+            </div>
+            <input ref=${input} type="text" class="form-control" placeholder="github.com/crossplane/provider-gcp" onInput=${e => setUrl(e.target.value)} value=${url} />
+            <div class="input-group-append">
+                <button class="btn btn-primary" type="search">Go</span>
+            </div>
+        </form>`;
+    }
+    render(html`<${RepoGo} />`, document.getElementById("repo_go"));
+</script>

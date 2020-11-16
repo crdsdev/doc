@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+
+<head>
+    <title>Doc</title>
+    {{ template "_head" . }}
+    <link rel="stylesheet" href="/static/root.css">
+</head>
+
+<!-- Turn on Dark Mode by default -->
+<body class="dark-mode" data-dm-shortcut-enabled="true" data-sidebar-shortcut-enabled="true" data-set-preferred-mode-onload="true">
+    <div class="page-wrapper {{if not .Page.DisableNavBar}}with-navbar{{end}}">
+        {{ if not .Page.DisableNavBar }}
+        {{ template "_navbar" . }}
+        {{ end }}
+        {{ yield }}
+    </div>
+    {{ template "_footer" . }}
+</body>
+
+</html>

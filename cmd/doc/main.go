@@ -33,6 +33,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	flag "github.com/spf13/pflag"
+	"github.com/unrolled/render"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 )
 
@@ -40,8 +41,9 @@ var redisClient *redis.Client
 
 // redis connection
 var (
-	envAddress   = "REDIS_HOST"
-	envAnalytics = "ANALYTICS"
+	envAddress     = "REDIS_HOST"
+	envAnalytics   = "ANALYTICS"
+	envDevelopment = "IS_DEV"
 
 	address   string
 	analytics bool = false
@@ -53,19 +55,34 @@ type SchemaPlusParent struct {
 	Schema map[string]apiextensions.JSONSchemaProps
 }
 
-var pages = template.Must(template.New("").Funcs(
-	template.FuncMap{
-		"plusParent": func(p string, s map[string]apiextensions.JSONSchemaProps) *SchemaPlusParent {
-			return &SchemaPlusParent{
-				Parent: p,
-				Schema: s,
-			}
+var page = render.New(render.Options{
+	Extensions:    []string{".html"},
+	Directory:     "template",
+	Layout:        "layout",
+	IsDevelopment: os.Getenv(envAnalytics) == "true",
+	Funcs: []template.FuncMap{
+		{
+			"plusParent": func(p string, s map[string]apiextensions.JSONSchemaProps) *SchemaPlusParent {
+				return &SchemaPlusParent{
+					Parent: p,
+					Schema: s,
+				}
+			},
 		},
 	},
-).ParseGlob("template/*.html"))
+})
+
+type pageData struct {
+	Analytics     bool
+	DisableNavBar bool
+}
+
+type baseData struct {
+	Page pageData
+}
 
 type docData struct {
-	Analytics   bool
+	Page        pageData
 	Repo        string
 	Tag         string
 	At          string
@@ -77,7 +94,7 @@ type docData struct {
 }
 
 type orgData struct {
-	Analytics  bool
+	Page       pageData
 	Repo       string
 	Tag        string
 	At         string
@@ -87,12 +104,8 @@ type orgData struct {
 }
 
 type homeData struct {
-	Analytics bool
-	Repos     []string
-}
-
-type newData struct {
-	Analytics bool
+	Page  pageData
+	Repos []string
 }
 
 func init() {
@@ -129,13 +142,13 @@ func start() {
 }
 
 func home(w http.ResponseWriter, r *http.Request) {
-	data := homeData{Analytics: analytics}
+	data := homeData{Page: pageData{Analytics: analytics, DisableNavBar: true}}
 	if res, err := redisClient.SMembers("repos:popular").Result(); err != nil {
 		log.Printf("failed to get popular repos : %v", err)
 	} else {
 		data.Repos = res
 	}
-	if err := pages.ExecuteTemplate(w, "home.html", data); err != nil {
+	if err := page.HTML(w, http.StatusOK, "home", data); err != nil {
 		log.Printf("homeTemplate.Execute(): %v", err)
 		fmt.Fprint(w, "Unable to render home template.")
 		return
@@ -199,7 +212,7 @@ func org(w http.ResponseWriter, r *http.Request) {
 	res, err := redisClient.Get(strings.Join([]string{"github.com", org, repo}, "/") + at + tag).Result()
 	if err != nil {
 		log.Printf("failed to get CRDs for %s : %v", repo, err)
-		if err := pages.ExecuteTemplate(w, "new.html", newData{Analytics: analytics}); err != nil {
+		if err := page.HTML(w, http.StatusOK, "new", baseData{Page: pageData{Analytics: analytics}}); err != nil {
 			log.Printf("newTemplate.Execute(): %v", err)
 			fmt.Fprint(w, "Unable to render new template.")
 		}
@@ -210,11 +223,11 @@ func org(w http.ResponseWriter, r *http.Request) {
 	bytes := []byte(res)
 	if err := json.Unmarshal(bytes, repoData); err != nil {
 		log.Printf("failed to get CRDs for %s : %v", repo, err)
-		http.ServeFile(w, r, "template/home.html")
+		page.HTML(w, http.StatusOK, "home", homeData{Page: pageData{Analytics: analytics}})
 		return
 	}
-	if err := pages.ExecuteTemplate(w, "org.html", orgData{
-		Analytics:  analytics,
+	if err := page.HTML(w, http.StatusOK, "org", orgData{
+		Page:       pageData{Analytics: analytics},
 		Repo:       strings.Join([]string{org, repo}, "/"),
 		Tag:        tag,
 		At:         at,
@@ -246,7 +259,7 @@ func doc(w http.ResponseWriter, r *http.Request) {
 	res, err := redisClient.Get(strings.Trim(r.URL.Path, "/")).Result()
 	if err != nil {
 		log.Printf("failed to get CRDs for %s : %v", repo, err)
-		if err := pages.ExecuteTemplate(w, "doc.html", newData{Analytics: analytics}); err != nil {
+		if err := page.HTML(w, http.StatusOK, "doc", baseData{Page: pageData{Analytics: analytics}}); err != nil {
 			log.Printf("newTemplate.Execute(): %v", err)
 			fmt.Fprint(w, "Unable to render new template.")
 		}
@@ -277,8 +290,8 @@ func doc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := pages.ExecuteTemplate(w, "doc.html", docData{
-		Analytics:   analytics,
+	if err := page.HTML(w, http.StatusOK, "doc", docData{
+		Page:        pageData{Analytics: analytics},
 		Repo:        strings.Join([]string{org, repo}, "/"),
 		Tag:         tag,
 		At:          at,
