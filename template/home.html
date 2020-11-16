@@ -15,8 +15,12 @@
     </div>
 </div>
 
+{{ template "_scripts" . }}
 <script type="module">
-    import { html, render, useState, useEffect, useRef } from 'https://unpkg.com/htm/preact/standalone.module.js';
+    const { render } = ReactDOM;
+    const { useState, useRef, useEffect } = React;
+    const { html } = htmReact;
+
     function RepoGo() {
         const [url, setUrl] = useState('');
         const input = useRef(null);
