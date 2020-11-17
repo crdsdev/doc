@@ -45,6 +45,8 @@ var (
 	envAnalytics   = "ANALYTICS"
 	envDevelopment = "IS_DEV"
 
+	cookieDarkMode = "halfmoon_preferredMode"
+
 	address   string
 	analytics bool = false
 )
@@ -75,6 +77,7 @@ var page = render.New(render.Options{
 type pageData struct {
 	Analytics     bool
 	DisableNavBar bool
+	IsDarkMode    bool
 }
 
 type baseData struct {
@@ -127,6 +130,18 @@ func main() {
 	start()
 }
 
+func getPageData(r *http.Request, disableNavBar bool) pageData {
+	var isDarkMode = false
+	if cookie, err := r.Cookie(cookieDarkMode); err == nil && cookie.Value == "dark-mode" {
+		isDarkMode = true
+	}
+	return pageData{
+		Analytics:     analytics,
+		IsDarkMode:    isDarkMode,
+		DisableNavBar: disableNavBar,
+	}
+}
+
 func start() {
 	log.Println("Starting Doc server...")
 	r := mux.NewRouter().StrictSlash(true)
@@ -142,7 +157,7 @@ func start() {
 }
 
 func home(w http.ResponseWriter, r *http.Request) {
-	data := homeData{Page: pageData{Analytics: analytics, DisableNavBar: true}}
+	data := homeData{Page: getPageData(r, true)}
 	if res, err := redisClient.SMembers("repos:popular").Result(); err != nil {
 		log.Printf("failed to get popular repos : %v", err)
 	} else {
@@ -212,7 +227,7 @@ func org(w http.ResponseWriter, r *http.Request) {
 	res, err := redisClient.Get(strings.Join([]string{"github.com", org, repo}, "/") + at + tag).Result()
 	if err != nil {
 		log.Printf("failed to get CRDs for %s : %v", repo, err)
-		if err := page.HTML(w, http.StatusOK, "new", baseData{Page: pageData{Analytics: analytics}}); err != nil {
+		if err := page.HTML(w, http.StatusOK, "new", baseData{Page: getPageData(r, false)}); err != nil {
 			log.Printf("newTemplate.Execute(): %v", err)
 			fmt.Fprint(w, "Unable to render new template.")
 		}
@@ -223,11 +238,11 @@ func org(w http.ResponseWriter, r *http.Request) {
 	bytes := []byte(res)
 	if err := json.Unmarshal(bytes, repoData); err != nil {
 		log.Printf("failed to get CRDs for %s : %v", repo, err)
-		page.HTML(w, http.StatusOK, "home", homeData{Page: pageData{Analytics: analytics}})
+		page.HTML(w, http.StatusOK, "home", homeData{Page: getPageData(r, false)})
 		return
 	}
 	if err := page.HTML(w, http.StatusOK, "org", orgData{
-		Page:       pageData{Analytics: analytics},
+		Page:       getPageData(r, false),
 		Repo:       strings.Join([]string{org, repo}, "/"),
 		Tag:        tag,
 		At:         at,
@@ -259,7 +274,7 @@ func doc(w http.ResponseWriter, r *http.Request) {
 	res, err := redisClient.Get(strings.Trim(r.URL.Path, "/")).Result()
 	if err != nil {
 		log.Printf("failed to get CRDs for %s : %v", repo, err)
-		if err := page.HTML(w, http.StatusOK, "doc", baseData{Page: pageData{Analytics: analytics}}); err != nil {
+		if err := page.HTML(w, http.StatusOK, "doc", baseData{Page: getPageData(r, false)}); err != nil {
 			log.Printf("newTemplate.Execute(): %v", err)
 			fmt.Fprint(w, "Unable to render new template.")
 		}
@@ -291,7 +306,7 @@ func doc(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := page.HTML(w, http.StatusOK, "doc", docData{
-		Page:        pageData{Analytics: analytics},
+		Page:        getPageData(r, false),
 		Repo:        strings.Join([]string{org, repo}, "/"),
 		Tag:         tag,
 		At:          at,
