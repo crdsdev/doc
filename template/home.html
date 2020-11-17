@@ -1,7 +1,11 @@
-<div class="content-wrapper">
+<div class="position-fixed top-0 right-0 z-10">
+    <button class="btn btn-primary m-10" type="button" onclick="halfmoon.toggleDarkMode()"><i class="fas fa-moon" aria-hidden="true"></i><span class="sr-only">Toggle Dark Mode</span></button>
+</div>
+
+<div class="content-wrapper home-page">
     <div class="container mt-md-20">
-        <div class="content">
-            <h1 class="text-center">doc.crds.dev</h1>
+        <div class="content hero">
+            <h1 class="text-center site-title">doc.crds.dev</h1>
             <div id="repo_go"></div>
             <p class="text-center">doc.crds.dev is and always will be <a href="https://github.com/crdsdev/doc">free and open source</a>.</p>
         </div>
@@ -9,9 +13,11 @@
         {{ if gt (len .Repos) 0}}
         <h3>Recently Viewed Projects</h3>
         {{ end }}
+        <div class="org-links">
         {{ range $name := .Repos }}
-        <a href="/github.com/{{ $name }}"><h4>github.com/{{ $name }}</h4></a>
+        <a href="/github.com/{{ $name }}"><span class="org-link">github.com/{{ $name }}</span></a>
         {{ end }}
+        </div>
     </div>
 </div>
 
@@ -55,3 +61,34 @@
     }
     render(html`<${RepoGo} />`, document.getElementById("repo_go"));
 </script>
+
+<style>
+    .home-page .hero {
+        margin-top: 10vh;
+        margin-bottom: 5vh;
+    }
+
+    .home-page .hero .site-title {
+        margin-bottom: 2rem;
+    }
+
+    .home-page .org-links {
+        display: flex;
+        flex-direction: column;
+        row-gap: 1rem;
+    }
+
+    .home-page .org-link {
+        font-size: 2rem;
+    }
+
+    @media screen and (max-width: 575px) {
+        .home-page .org-links {
+            row-gap: .5rem;
+        }
+
+        .home-page .org-link {
+            font-size: 1.6rem;
+        }
+    }
+</style>

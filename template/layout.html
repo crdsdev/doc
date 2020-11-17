@@ -9,7 +9,9 @@
 
 <!-- Turn on Dark Mode by default -->
 <body class="{{if .Page.IsDarkMode}}dark-mode{{end}}" data-dm-shortcut-enabled="true" data-sidebar-shortcut-enabled="true">
+
     <div class="page-wrapper {{if not .Page.DisableNavBar}}with-navbar{{end}}">
+        <div class="sticky-alerts"></div>
         {{ if not .Page.DisableNavBar }}
         {{ template "_navbar" . }}
         {{ end }}

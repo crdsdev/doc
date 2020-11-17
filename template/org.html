@@ -8,9 +8,9 @@
                 <a href="https://github.com/{{ .Repo }}/tree/master"><span class="label label-primary">github.com/{{ .Repo }}/tree/master</span></a>
             {{ end }}
         </div>
-        <h3>CRDs discovered: <b>{{ .Total }}</b></h3>
+        <p>CRDs discovered: <b>{{ .Total }}</b></p>
         <p><b>Last parsed:</b>&nbsp;<span id="parsedAt"></span></p>
-        <div id="crds" class="table-responsive"></div>
+        <div id="crds"></div>
     </div>
 </div>
 
@@ -72,30 +72,32 @@
         } = table;
 
         return html`
-        <form class="form-inline w-400" onSubmit=${e => e.preventDefault}>
+        <form class="form-inline w-md-400 w-sm-full mb-md-10 mb-5" onSubmit=${e => e.preventDefault}>
             <input type="search" class="form-control" placeholder="e.g. CacheCluster, acm.aws" onInput=${e => setGlobalFilter(e.target.value)} value=${globalFilter}></input>
         </form>
-        <table class="table table-striped" ...${getTableProps()}>
-            <thead>
-                ${headerGroups.map(group => html`
-                <tr ...${group.getHeaderGroupProps()}>
-                    ${group.headers.map(CRDHeader)}
-                </tr>
-                `)}
-            </thead>
-            <tbody ...${getTableBodyProps()}>
-                ${rows.map(row => {
-                    prepareRow(row)
-                    return html`
-                    <tr ...${row.getRowProps()}>
-                        ${row.cells.map(cell => html`
-                        <td ...${cell.getCellProps()}>${cell.render('Cell')}</td>
-                        `)}
+        <div class="table-responsive">
+            <table class="table table-striped table-outer-bordered" ...${getTableProps()}>
+                <thead>
+                    ${headerGroups.map(group => html`
+                    <tr ...${group.getHeaderGroupProps()}>
+                        ${group.headers.map(CRDHeader)}
                     </tr>
-                    `
-                })}
-            </tbody>
-        </table>`;
+                    `)}
+                </thead>
+                <tbody ...${getTableBodyProps()}>
+                    ${rows.map(row => {
+                        prepareRow(row)
+                        return html`
+                        <tr ...${row.getRowProps()}>
+                            ${row.cells.map(cell => html`
+                            <td ...${cell.getCellProps()}>${cell.render('Cell')}</td>
+                            `)}
+                        </tr>
+                        `
+                    })}
+                </tbody>
+            </table>
+        </div>`;
     }
 
     render(html`<${CRDTable} />`, document.getElementById("crds"));

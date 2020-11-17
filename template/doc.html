@@ -1,5 +1,6 @@
 <style>
-    .crd-label .crd-type, .crd-label .crd-value {
+    .crd-label .crd-type,
+    .crd-label .crd-value {
         display: inline-block
     }
 </style>
@@ -9,9 +10,11 @@
 </div>
 
 {{ template "_scripts" . }}
-<script src="https://unpkg.com/marked@1.2.4/marked.min.js"></script> 
-<script src="https://unpkg.com/dompurify@2.2.2/dist/purify.js"></script> 
+<script src="https://unpkg.com/marked@1.2.4/marked.min.js"></script>
+<script src="https://unpkg.com/dompurify@2.2.2/dist/purify.js"></script>
 <script src="https://unpkg.com/eventemitter3@latest/umd/eventemitter3.min.js"></script>
+<script src="https://unpkg.com/slugify@1.4.6/slugify.js"></script>
+<script src="https://unpkg.com/clipboard@2.0.6/dist/clipboard.min.js"></script>
 <script id="pageData" type="application/json">
     {{ . }}
 </script>
@@ -21,6 +24,14 @@
     const { html } = htmReact;
     const bus = new EventEmitter3();
     window.bus = bus;
+
+    const clipboard = new ClipboardJS('.copy-url');
+    clipboard.on('success', e => {
+        halfmoon.initStickyAlert({
+            content: "Copied Link!",
+            timeShown: 2000
+        })
+    });
 
     marked.setOptions({
         highlight: (code, lang, callback) => {
@@ -58,7 +69,7 @@
         `;
     }
 
-    function SchemaPart({ key, property, parent }) {
+    function SchemaPart({ key, property, parent, parentSlug }) {
         const [props, propKeys, required] = useMemo(() => {
             const props = property.Properties || {};
             const propKeys = Object.keys(props);
@@ -70,8 +81,26 @@
             return [props, propKeys, required]
         }, [parent, property]);
 
-        const [isOpen, setIsOpen] = useState(key == "spec" && !parent);
-        
+        const slug = useMemo(() => slugify((parentSlug ? `${parentSlug}-` : '') + key), [parentSlug, key]);
+        const fullLink = useMemo(() => {
+            const url = new URL(location.href);
+            url.hash = `#${slug}`;
+            return url.toJSON();
+        });
+        const isHyperlinked = useCallback(() => location.hash.substring(1).startsWith(slug), [slug]);
+
+        const [isOpen, setIsOpen] = useState((key == "spec" && !parent) || isHyperlinked());
+
+        useEffect(() => {
+            const handleHashChange = () => {
+                if (!isOpen && isHyperlinked()) {
+                    setIsOpen(true);
+                }
+            };
+            window.addEventListener('hashchange', handleHashChange);
+            return () => window.removeEventListener('hashchange', handleHashChange);
+        }, [isOpen]);
+
         useEffect(() => {
             const collapse = () => setIsOpen(false);
             const expand = () => setIsOpen(true);
@@ -85,14 +114,17 @@
 
         return html`
         <details class="collapse-panel" open="${isOpen}" onToggle=${e => { setIsOpen(e.target.open); e.stopPropagation(); }}>
-            <summary class="collapse-header">
-                ${key} <kbd class="text-muted">${property.Type}</kbd> ${required ? html`<kbd class="text-muted">required</kbd>` : ''}
+            <summary class="collapse-header position-relative">
+                ${key} <kbd class="text-muted">${property.Type}</kbd> ${required ? html`<span class="badge badge-primary">required</span>` : ''}
+                <button class="btn btn-sm position-absolute right-0 top-0 m-5 copy-url z-10" type="button" data-clipboard-text="${fullLink}">🔗</button>
             </summary>
-            <div class="collapse-content">
+            <div id="${slug}" class="collapse-content">
                 ${React.createElement("div", { dangerouslySetInnerHTML: { __html: DOMPurify.sanitize(marked.parseInline(property.Description)) } })}
                 ${propKeys.length > 0 ? html`<br />` : ''}
                 ${propKeys
-                        .map(key => SchemaPart({ parent: property, key, property: props[key] }))}
+                .map(propKey => SchemaPart({
+                    parent: property, parentKey: key, key: propKey, property: props[propKey], parentSlug: slug
+                }))}
             </div>
         </details>`;
     }
@@ -100,7 +132,7 @@
     function PartLabel({ type, value }) {
         return html`
         <div class="mt-10">
-            <span class="text-light font-weight-semibold font-size-24">${value}</span>
+            <span class="font-weight-semibold font-size-24">${value}</span>
             <br />
             <span class="text-muted font-size-12">${type}</span>
         </div>`;
