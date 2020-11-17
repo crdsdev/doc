@@ -61,7 +61,7 @@ var page = render.New(render.Options{
 	Extensions:    []string{".html"},
 	Directory:     "template",
 	Layout:        "layout",
-	IsDevelopment: os.Getenv(envAnalytics) == "true",
+	IsDevelopment: os.Getenv(envDevelopment) == "true",
 	Funcs: []template.FuncMap{
 		{
 			"plusParent": func(p string, s map[string]apiextensions.JSONSchemaProps) *SchemaPlusParent {
