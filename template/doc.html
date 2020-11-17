@@ -49,15 +49,24 @@
     if (properties.kind) delete properties.kind;
     if (properties.metadata && properties.metadata.Type == "object") delete properties.metadata;
 
+    function getDescription(schema) {
+        return DOMPurify.sanitize(marked.parseInline(schema.Description));
+    }
+
     function CRD() {
         const expandAll = useCallback(() => bus.emit('expand-all'), []);
         const collapseAll = useCallback(() => bus.emit('collapse-all'), []);
         return html`
-            <${PartLabel} type="Kind" value=${Kind} />
-            <${PartLabel} type="Group" value=${Group} />
-            <${PartLabel} type="Version" value=${Version} />
+            <div class="parts d-md-flex justify-content-between mt-md-20 mb-md-20">
+                <${PartLabel} type="Kind" value=${Kind} />
+                <${PartLabel} type="Group" value=${Group} />
+                <${PartLabel} type="Version" value=${Version} />
+            </div>
 
+            <hr class="mb-md-20" />
             <pre><code class="language-yaml">${`apiVersion: ${Group}/${Version}\nkind: ${Kind}`}</code></pre>
+
+            <p class="font-size-18">${React.createElement('div', { dangerouslySetInnerHTML: { __html: getDescription(Schema) } })}</p>
 
             <div class="d-flex flex-row-reverse mb-10 mt-10">
                 <button class="btn ml-10" type="button" onClick=${expandAll}>+ expand all</button>
@@ -119,7 +128,7 @@
                 <button class="btn btn-sm position-absolute right-0 top-0 m-5 copy-url z-10" type="button" data-clipboard-text="${fullLink}">🔗</button>
             </summary>
             <div id="${slug}" class="collapse-content">
-                ${React.createElement("div", { dangerouslySetInnerHTML: { __html: DOMPurify.sanitize(marked.parseInline(property.Description)) } })}
+                ${React.createElement("div", { dangerouslySetInnerHTML: { __html: getDescription(property) } })}
                 ${propKeys.length > 0 ? html`<br />` : ''}
                 ${propKeys
                 .map(propKey => SchemaPart({
@@ -134,7 +143,7 @@
         <div class="mt-10">
             <span class="font-weight-semibold font-size-24">${value}</span>
             <br />
-            <span class="text-muted font-size-12">${type}</span>
+            <span class="badge text-muted font-size-12">${type}</span>
         </div>`;
     }
 
