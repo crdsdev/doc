@@ -34,7 +34,7 @@
         {
             Header: 'Kind',
             accessor: 'Kind',
-            Cell: ({ row: { original }, value }) => html`<a href=${`/github.com/${Repo}/${original.Path}/${At}/${Tag}`}>${value}</a>`
+            Cell: ({ row: { original }, value }) => html`<a href=${`/github.com/${Repo}/${original.Path}${At}${Tag}`}>${value}</a>`
         },
         {
             Header: 'Group',
