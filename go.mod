@@ -16,6 +16,7 @@ require (
 	github.com/onsi/gomega v1.8.1 // indirect
 	github.com/prometheus/client_golang v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5
+	github.com/unrolled/render v1.0.3
 	golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e // indirect
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d // indirect
 	golang.org/x/sys v0.0.0-20200331124033-c3d80250170d // indirect

@@ -85,7 +85,7 @@ func gitter(repos []string, r *redis.Client) error {
 
 	for _, repoURL := range repos {
 		log.Printf("Indexing repo %s...\n", repoURL)
-		dir, err := ioutil.TempDir("tmp", "doc-gitter")
+		dir, err := ioutil.TempDir(os.TempDir(), "doc-gitter")
 		if err != nil {
 			return err
 		}

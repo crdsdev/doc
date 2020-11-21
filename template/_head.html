@@ -1,0 +1,24 @@
+<link rel="icon" type="image/png" href="/static/favicon.ico?v=1" />
+{{ if .Page.Analytics }}
+<script async src="https://www.googletagmanager.com/gtag/js?id=UA-116820283-2"></script>
+<script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    gtag('js', new Date());
+
+    gtag('config', 'UA-116820283-2');
+</script>
+{{ end }}
+<meta charset="utf-8" />
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" name="viewport" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<meta name="twitter:image:src" content="https://doc.crds.dev/static/twitter.jpg" />
+<meta name="twitter:site" content="@crdsdev" />
+<meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="Doc" />
+<meta name="twitter:description" content="Automatic documentation for your CustomResourceDefinitions." />
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.1/css/all.css" integrity="sha256-iqohlDG+xn9MRt53DKygzaORvtzhTCN4xvi1LHNU3OM=" crossorigin="anonymous">
+
+{{ partial "head" }}

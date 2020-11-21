@@ -1,0 +1,20 @@
+@import url("https://unpkg.com/halfmoon@1.1.1/css/halfmoon-variables.min.css");
+
+:root {
+    --primary-color: var(--indigo-color);
+    --primary-color-light: var(--indigo-color-light);
+    --primary-color-very-light: var(--indigo-color-very-light);
+    --primary-color-dark: var(--indigo-color-dark);
+    --primary-color-very-dark: var(--indigo-color-very-dark);
+    --primary-box-shadow-color: var(--indigo-box-shadow-color);
+    --primary-box-shadow-color-darker: var(--indigo-box-shadow-color-darker);
+    --text-color-on-primary-color-bg: var(--text-color-on-indigo-color-bg);
+    --dm-link-text-color: var(--indigo-color-light);
+}
+
+@media (max-width: 576px) {
+    body .content-wrapper > div {
+        padding-left: 1.5rem;
+        padding-right: 1.5rem;
+    }
+}
