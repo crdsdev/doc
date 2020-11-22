@@ -28,6 +28,7 @@ import (
 	"strings"
 	"time"
 
+	crdutil "github.com/crdsdev/doc/pkg/crd"
 	"github.com/crdsdev/doc/pkg/models"
 	"github.com/go-redis/redis"
 	"github.com/google/uuid"
@@ -305,14 +306,21 @@ func doc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	gvk := crdutil.GetStoredGVK(crd)
+	if gvk == nil {
+		log.Print("CRD GVK is nil.")
+		fmt.Fprint(w, "Supplied CRD has no GVK.")
+		return
+	}
+
 	if err := page.HTML(w, http.StatusOK, "doc", docData{
 		Page:        getPageData(r, false),
 		Repo:        strings.Join([]string{org, repo}, "/"),
 		Tag:         tag,
 		At:          at,
-		Group:       crd.Spec.Group,
-		Version:     crd.Spec.Version,
-		Kind:        crd.Spec.Names.Kind,
+		Group:       gvk.Group,
+		Version:     gvk.Version,
+		Kind:        gvk.Kind,
 		Description: string(schema.OpenAPIV3Schema.Description),
 		Schema:      *schema.OpenAPIV3Schema,
 	}); err != nil {
