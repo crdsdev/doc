@@ -226,9 +226,9 @@ func getCRDsFromTag(repo string, dir string, tag string, hash *plumbing.Hash, w 
 			repoData.CRDs[crd.PrettyGVK(crder.GVK)] = models.RepoCRD{
 				Path:     crd.PrettyGVK(crder.GVK),
 				Filename: path.Base(file),
-				Group:    crder.CRD.Spec.Group,
-				Version:  crder.CRD.Spec.Version,
-				Kind:     crder.CRD.Spec.Names.Kind,
+				Group:    crder.GVK.Group,
+				Version:  crder.GVK.Version,
+				Kind:     crder.GVK.Kind,
 			}
 			crds["github.com"+"/"+repo+"/"+crd.PrettyGVK(crder.GVK)+"@"+tag] = cbytes
 		}
@@ -278,9 +278,9 @@ func getCRDsFromMaster(repo string, dir string, w *git.Worktree) (*models.Repo, 
 			repoData.CRDs[crd.PrettyGVK(crder.GVK)] = models.RepoCRD{
 				Path:     crd.PrettyGVK(crder.GVK),
 				Filename: path.Base(file),
-				Group:    crder.CRD.Spec.Group,
-				Version:  crder.CRD.Spec.Version,
-				Kind:     crder.CRD.Spec.Names.Kind,
+				Group:    crder.GVK.Group,
+				Version:  crder.GVK.Version,
+				Kind:     crder.GVK.Kind,
 			}
 			crds["github.com"+"/"+repo+"/"+crd.PrettyGVK(crder.GVK)] = cbytes
 		}
