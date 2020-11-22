@@ -56,7 +56,7 @@ func NewCRDer(data []byte, m ...Modifier) (*CRDer, error) {
 		}
 	}
 
-	gvk := getStoredGVK(internal)
+	gvk := GetStoredGVK(internal)
 	if gvk == nil {
 		return nil, errors.New(getStoredGVKErr)
 	}
@@ -151,7 +151,7 @@ func getStoredSchema(spec apiextensions.CustomResourceDefinitionSpec) *apiextens
 	return nil
 }
 
-func getStoredGVK(crd *apiextensions.CustomResourceDefinition) *schema.GroupVersionKind {
+func GetStoredGVK(crd *apiextensions.CustomResourceDefinition) *schema.GroupVersionKind {
 	for _, v := range crd.Spec.Versions {
 		if v.Storage {
 			return &schema.GroupVersionKind{
