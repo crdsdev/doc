@@ -95,8 +95,10 @@ ${schema.Enum.map(e => `- '${e}'`).join('\n')}
                 if (itemsSchema.Type !== 'object') {
                     type = `[]${itemsSchema.Type}`;
                 } else {
+                    console.log({ property, itemsSchema });
                     schema = itemsSchema;
                     props = itemsSchema.Properties;
+                    type = `[]object`;
                 }
             }
             let propKeys = Object.keys(props);
