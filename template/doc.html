@@ -34,11 +34,8 @@
     });
 
     marked.setOptions({
-        highlight: (code, lang, callback) => {
-            try {
-                const result = Prism.highlight(code, Prism.languages[lang], lang);
-                callback(null, result);
-            } catch (e) { callback(e, undefined) }
+        highlight: (code, lang) => {
+            return `<pre><code class="language-${lang}">${code}</code></pre>`
         }
     })
 
@@ -50,7 +47,15 @@
     if (properties.metadata && properties.metadata.Type == "object") delete properties.metadata;
 
     function getDescription(schema) {
-        return DOMPurify.sanitize(marked.parseInline(schema.Description));
+        let desc = schema.Description;
+        if (schema.Enum) {
+            desc += '\n' + `
+\`\`\`yaml
+# valid values
+${schema.Enum.map(e => `- '${e}'`).join('\n')}
+\`\`\``.trim()
+        }
+        return DOMPurify.sanitize(marked(desc));
     }
 
     function CRD() {
@@ -79,16 +84,32 @@
     }
 
     function SchemaPart({ key, property, parent, parentSlug }) {
-        const [props, propKeys, required] = useMemo(() => {
-            const props = property.Properties || {};
-            const propKeys = Object.keys(props);
+        const [props, propKeys, required, type, schema] = useMemo(() => {
+            let schema = property;
+            let props = property.Properties || {};
+
+            let type = property.Type;
+            if (type === 'array') {
+                const itemsSchema = property.Items.Schema;
+                if (itemsSchema.Type !== 'object') {
+                    type = `[]${itemsSchema.Type}`;
+                } else {
+                    schema = itemsSchema;
+                    props = itemsSchema.Properties;
+                }
+            }
+            let propKeys = Object.keys(props);
 
             let required = false;
             if (parent && parent.Required && parent.Required.includes(key)) {
                 required = true;
             }
-            return [props, propKeys, required]
+            return [props, propKeys, required, type, schema]
         }, [parent, property]);
+
+        if (schema.Enum) {
+            console.log({ props, type, schema, parent });
+        }
 
         const slug = useMemo(() => slugify((parentSlug ? `${parentSlug}-` : '') + key), [parentSlug, key]);
         const fullLink = useMemo(() => {
@@ -124,16 +145,18 @@
         return html`
         <details class="collapse-panel" open="${isOpen}" onToggle=${e => { setIsOpen(e.target.open); e.stopPropagation(); }}>
             <summary class="collapse-header position-relative">
-                ${key} <kbd class="text-muted">${property.Type}</kbd> ${required ? html`<span class="badge badge-primary">required</span>` : ''}
+                ${key} <kbd class="text-muted">${type}</kbd> ${required ? html`<span class="badge badge-primary">required</span>` : ''}
                 <button class="btn btn-sm position-absolute right-0 top-0 m-5 copy-url z-10" type="button" data-clipboard-text="${fullLink}">🔗</button>
             </summary>
             <div id="${slug}" class="collapse-content">
                 ${React.createElement("div", { dangerouslySetInnerHTML: { __html: getDescription(property) } })}
                 ${propKeys.length > 0 ? html`<br />` : ''}
+                <div class="collapse-group">
                 ${propKeys
                 .map(propKey => SchemaPart({
-                    parent: property, parentKey: key, key: propKey, property: props[propKey], parentSlug: slug
+                    parent: schema, parentKey: key, key: propKey, property: props[propKey], parentSlug: slug
                 }))}
+                </div>
             </div>
         </details>`;
     }
