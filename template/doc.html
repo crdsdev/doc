@@ -152,7 +152,7 @@ ${schema.Enum.map(e => `- '${e}'`).join('\n')}
                 <button class="btn btn-sm position-absolute right-0 top-0 m-5 copy-url z-10" type="button" data-clipboard-text="${fullLink}">🔗</button>
             </summary>
             <div id="${slug}" class="collapse-content">
-                ${React.createElement("div", { dangerouslySetInnerHTML: { __html: getDescription(property) } })}
+                ${React.createElement("div", { className: 'property-description', dangerouslySetInnerHTML: { __html: getDescription(property) } })}
                 ${propKeys.length > 0 ? html`<br />` : ''}
                 <div class="collapse-group">
                 ${propKeys
@@ -177,3 +177,9 @@ ${schema.Enum.map(e => `- '${e}'`).join('\n')}
 </script>
 <script defer src="https://unpkg.com/prismjs@1/components/prism-core.min.js"></script>
 <script defer src="https://unpkg.com/prismjs@1/plugins/autoloader/prism-autoloader.min.js"></script>
+<style>
+    /* Remove extra whitespace introduced by markdown translation */
+    .property-description > p {
+        margin: 0;
+    }
+</style>
