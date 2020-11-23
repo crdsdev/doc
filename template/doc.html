@@ -48,13 +48,17 @@
     if (properties.metadata && properties.metadata.Type == "object") delete properties.metadata;
 
     function getDescription(schema) {
-        let desc = schema.Description;
+        let desc = schema.Description || '';
         if (schema.Enum) {
             desc += '\n' + `
 \`\`\`yaml
 # valid values
 ${schema.Enum.map(e => `- '${e}'`).join('\n')}
 \`\`\``.trim()
+        }
+
+        if (desc.trim() == '') {
+            desc = '_No Description Provided._'
         }
         return DOMPurify.sanitize(marked(desc));
     }
