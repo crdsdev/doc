@@ -35,7 +35,8 @@
 
     marked.setOptions({
         highlight: (code, lang) => {
-            return `<pre><code class="language-${lang}">${code}</code></pre>`
+            // Handle the case where Prism might not have loaded yet.
+            return window.Prism ? Prism.highlight(code, Prism.languages[lang], lang) : `<pre><code class="language-${lang}">${code}</code></pre>`;
         }
     })
 
@@ -106,10 +107,6 @@ ${schema.Enum.map(e => `- '${e}'`).join('\n')}
             }
             return [props, propKeys, required, type, schema]
         }, [parent, property]);
-
-        if (schema.Enum) {
-            console.log({ props, type, schema, parent });
-        }
 
         const slug = useMemo(() => slugify((parentSlug ? `${parentSlug}-` : '') + key), [parentSlug, key]);
         const fullLink = useMemo(() => {
