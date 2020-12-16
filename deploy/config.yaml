@@ -9,4 +9,19 @@ metadata:
   name: doc-repos
   namespace: crdsdev
 data:
-  repos: "crossplane/crossplane,crossplane/provider-gcp,crossplane/provider-aws,crossplane/provider-azure,crossplane/provider-alibaba,crossplane/provider-rook,crossplane-contrib/provider-helm,kubernetes-sigs/cluster-api,jetstack/cert-manager,schemahero/schemahero,projectcontour/contour,packethost/crossplane-provider-packet,kubernetes-sigs/cluster-api-provider-packet,crossplane/oam-kubernetes-runtime,kubernetes-sigs/security-profiles-operator"
+  repos: |
+    crossplane/crossplane,
+    crossplane/provider-alibaba,
+    crossplane/provider-aws,
+    crossplane/provider-azure,
+    crossplane/provider-gcp,
+    crossplane/provider-rook,
+    crossplane/oam-kubernetes-runtime,
+    crossplane-contrib/provider-helm,
+    jetstack/cert-manager,
+    kubernetes-sigs/cluster-api,
+    kubernetes-sigs/cluster-api-provider-packet,
+    kubernetes-sigs/security-profiles-operator,
+    packethost/crossplane-provider-packet,
+    projectcontour/contour,
+    schemahero/schemahero
