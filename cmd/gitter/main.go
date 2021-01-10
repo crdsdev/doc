@@ -51,7 +51,14 @@ var (
 func init() {
 	address = os.Getenv(envAddress)
 
-	repos = strings.Split(os.Getenv(envRepos), ",")
+	repos = normalize(os.Getenv(envRepos))
+}
+
+func normalize(s string) []string {
+	s = strings.Replace(s, "\n", "", -1)
+	s = strings.TrimSpace(s)
+
+	return strings.Split(s, ",")
 }
 
 func main() {
