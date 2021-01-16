@@ -18,52 +18,39 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"path"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/crdsdev/doc/pkg/crd"
 	"github.com/crdsdev/doc/pkg/models"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-redis/redis/v7"
-	flag "github.com/spf13/pflag"
+	"github.com/jackc/pgx/v4"
 	"gopkg.in/square/go-jose.v2/json"
 )
 
-const popularReposSet = "repos:popular"
+const (
+	crdArgCount = 7
 
-var redisClient *redis.Client
-
-var (
-	envAddress = "REDIS_HOST"
-	envRepos   = "REPOS"
-
-	address string
-	repos   []string
+	userEnv     = "PG_USER"
+	passwordEnv = "PG_PASS"
+	hostEnv     = "PG_HOST"
+	portEnv     = "PG_PORT"
+	dbEnv       = "PG_DB"
 )
 
-func init() {
-	address = os.Getenv(envAddress)
-
-	repos = normalize(os.Getenv(envRepos))
-}
-
-func normalize(s string) []string {
-	s = strings.Replace(s, "\n", "", -1)
-	s = strings.TrimSpace(s)
-
-	return strings.Split(s, ",")
-}
+var (
+	// TODO(hasheddan): temporarily hard-coded
+	repos = []string{"crossplane/crossplane"}
+)
 
 func main() {
-	flag.Parse()
-
 	dir, err := os.Getwd()
 	if err != nil {
 		panic(err)
@@ -74,22 +61,19 @@ func main() {
 	}
 	defer os.RemoveAll(cloneDir)
 
-	redisClient = redis.NewClient(&redis.Options{
-		Addr: address + ":6379",
-	})
+	dsn := fmt.Sprintf("postgresql://%s:%s@%s:%s/%s", os.Getenv(userEnv), os.Getenv(passwordEnv), os.Getenv(hostEnv), os.Getenv(portEnv), os.Getenv(dbEnv))
+	conn, err := pgx.Connect(context.Background(), dsn)
+	if err != nil {
+		panic(err)
+	}
 
-	if err := gitter(repos, redisClient); err != nil {
+	if err := gitter(repos, conn); err != nil {
 		panic(err)
 	}
 }
 
-func gitter(repos []string, r *redis.Client) error {
+func gitter(repos []string, conn *pgx.Conn) error {
 	log.Println("Starting gitter...")
-
-	if _, err := r.SAdd(popularReposSet, repos).Result(); err != nil {
-		log.Printf("Failed to add repos to set: %v", err)
-	}
-
 	for _, repoURL := range repos {
 		log.Printf("Indexing repo %s...\n", repoURL)
 		dir, err := ioutil.TempDir(os.TempDir(), "doc-gitter")
@@ -103,71 +87,35 @@ func gitter(repos []string, r *redis.Client) error {
 		if err != nil {
 			return err
 		}
-
 		iter, err := repo.Tags()
 		if err != nil {
 			return err
 		}
-
 		w, err := repo.Worktree()
 		if err != nil {
 			return err
 		}
-
-		// Get master
-		repoCrds, crds, raw, err := getCRDsFromMaster(repoURL, dir, w)
-		if err != nil {
-			log.Printf("Unable to get CRDs: %s@%s", repoURL, "master")
-			return err
-		}
-		if err := r.MSet(crds); err.Err() != nil {
-			log.Printf("Unable to mass set CRD contents for %s@%s", repoURL, "master")
-			return err.Err()
-		}
-		bytes, err := json.Marshal(repoCrds)
-		if err != nil {
-			return err
-		}
-		if err := r.Set("github.com"+"/"+repoURL, bytes, 0); err.Err() != nil {
-			log.Printf("Unable to set CRD list for %s@%s", repoURL, "master")
-			return err.Err()
-		}
-		if err := r.Set("raw/"+"github.com"+"/"+repoURL, raw, 0); err.Err() != nil {
-			log.Printf("Unable to set raw CRDs for %s@%s", repoURL, "master")
-			return err.Err()
-		}
-
-		// Get tags
+		// Get CRDs for each tag
 		if err := iter.ForEach(func(obj *plumbing.Reference) error {
 			h, err := repo.ResolveRevision(plumbing.Revision(obj.Hash().String()))
 			if err != nil || h == nil {
 				log.Printf("Unable to resolve revision: %s (%v)", obj.Hash().String(), err)
+				return nil
 			}
-			repoCrds, crds, raw, err := getCRDsFromTag(repoURL, dir, obj.Name().Short(), h, w)
+			repoCrds, err := getCRDsFromTag(repoURL, dir, obj.Name().Short(), h, w)
 			if err != nil {
 				log.Printf("Unable to get CRDs: %s@%s (%v)", repoURL, obj.Name().Short(), err)
 				return nil
 			}
-			if len(crds) > 0 {
-				if err := r.MSet(crds); err.Err() != nil {
-					log.Printf("Unable to mass set CRD contents for %s@%s", repoURL, obj.Name().Short())
-					return err.Err()
+			if len(repoCrds.CRDs) > 0 {
+				allArgs := make([]interface{}, 0, len(repoCrds.CRDs)*crdArgCount)
+				for _, crd := range repoCrds.CRDs {
+					allArgs = append(allArgs, crd.Group, crd.Version, crd.Kind, repoCrds.GithubURL, repoCrds.Tag, crd.Filename, crd.CRD)
+				}
+				if _, err := conn.Exec(context.Background(), buildInsert("INSERT INTO crds(\"group\", version, kind, repo, tag, filename, data) VALUES ", crdArgCount, len(repoCrds.CRDs)), allArgs...); err != nil {
+					panic(err)
 				}
 			}
-			bytes, err := json.Marshal(repoCrds)
-			if err != nil {
-				return err
-			}
-			if err := r.Set("github.com"+"/"+repoURL+"@"+obj.Name().Short(), bytes, 0); err.Err() != nil {
-				log.Printf("Unable to set CRD list for %s@%s", repoURL, obj.Name().Short())
-				return err.Err()
-			}
-
-			if err := r.Set("raw/"+"github.com"+"/"+repoURL+"@"+obj.Name().Short(), raw, 0); err.Err() != nil {
-				log.Printf("Unable to set raw CRDs for %s@%s", repoURL, "master")
-				return err.Err()
-			}
-
 			return nil
 		}); err != nil {
 			log.Printf("Failed indexing %s, continuing to other repos: %v", repoURL, err)
@@ -178,20 +126,18 @@ func gitter(repos []string, r *redis.Client) error {
 	return nil
 }
 
-func getCRDsFromTag(repo string, dir string, tag string, hash *plumbing.Hash, w *git.Worktree) (*models.Repo, map[string]interface{}, []byte, error) {
-	log.Printf("Getting CRDs for tag (%s) at commit (%s)", tag, hash.String())
-
+func getCRDsFromTag(repo string, dir string, tag string, hash *plumbing.Hash, w *git.Worktree) (*models.Repo, error) {
 	err := w.Checkout(&git.CheckoutOptions{
 		Hash:  *hash,
 		Force: true,
 	})
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 	if err := w.Reset(&git.ResetOptions{
 		Mode: git.HardReset,
 	}); err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 	reg := regexp.MustCompile("kind: CustomResourceDefinition")
 	regPath := regexp.MustCompile("^.*\\.yaml")
@@ -205,95 +151,30 @@ func getCRDsFromTag(repo string, dir string, tag string, hash *plumbing.Hash, w 
 		LastParsed: time.Now(),
 		CRDs:       map[string]models.RepoCRD{},
 	}
-	crds := map[string]interface{}{}
-	raw := []byte{}
 	files := splitYAML(g, dir)
-	numFiles := len(files)
 	fileCount := 0
 	for file, yamls := range files {
-		numYAMLs := len(yamls)
-		for i, y := range yamls {
+		for _, y := range yamls {
 			crder, err := crd.NewCRDer(y, crd.StripLabels(), crd.StripAnnotations(), crd.StripConversion())
 			if err != nil || crder.CRD == nil {
-				log.Printf("failed to convert to CRD: %v", err)
 				continue
 			}
-
 			cbytes, err := json.Marshal(crder.CRD)
 			if err != nil {
-				log.Printf("failed to marshal CRD in: %s/%s, %v", file, tag, err)
 				continue
 			}
-
-			raw = append(raw, bytes.TrimRight(bytes.TrimLeft(y, "\n"), "\n")...)
-			if i != numYAMLs-1 || fileCount != numFiles-1 {
-				raw = append(raw, []byte("\n---\n")...)
-			}
-
 			repoData.CRDs[crd.PrettyGVK(crder.GVK)] = models.RepoCRD{
 				Path:     crd.PrettyGVK(crder.GVK),
 				Filename: path.Base(file),
 				Group:    crder.GVK.Group,
 				Version:  crder.GVK.Version,
 				Kind:     crder.GVK.Kind,
+				CRD:      cbytes,
 			}
-			crds["github.com"+"/"+repo+"/"+crd.PrettyGVK(crder.GVK)+"@"+tag] = cbytes
 		}
 		fileCount++
 	}
-	return repoData, crds, raw, nil
-}
-
-func getCRDsFromMaster(repo string, dir string, w *git.Worktree) (*models.Repo, map[string]interface{}, []byte, error) {
-	reg := regexp.MustCompile("kind: CustomResourceDefinition")
-	regPath := regexp.MustCompile("^.*\\.yaml")
-	g, _ := w.Grep(&git.GrepOptions{
-		Patterns:  []*regexp.Regexp{reg},
-		PathSpecs: []*regexp.Regexp{regPath},
-	})
-	repoData := &models.Repo{
-		GithubURL:  "github.com" + "/" + repo,
-		Tag:        "master",
-		LastParsed: time.Now(),
-		CRDs:       map[string]models.RepoCRD{},
-	}
-	crds := map[string]interface{}{}
-	raw := []byte{}
-	files := splitYAML(g, dir)
-	numFiles := len(files)
-	fileCount := 0
-	for file, yamls := range files {
-		numYAMLs := len(yamls)
-		for i, y := range yamls {
-			crder, err := crd.NewCRDer(y, crd.StripLabels(), crd.StripAnnotations(), crd.StripConversion())
-			if err != nil || crder.CRD == nil {
-				log.Printf("failed to convert to CRD: %v", err)
-				continue
-			}
-
-			cbytes, err := json.Marshal(crder.CRD)
-			if err != nil {
-				log.Printf("failed to marshal CRD in: %s/%s, %v", file, "master", err)
-				continue
-			}
-
-			raw = append(raw, bytes.TrimRight(bytes.TrimLeft(y, "\n"), "\n")...)
-			if i != numYAMLs-1 || fileCount != numFiles-1 {
-				raw = append(raw, []byte("\n---\n")...)
-			}
-
-			repoData.CRDs[crd.PrettyGVK(crder.GVK)] = models.RepoCRD{
-				Path:     crd.PrettyGVK(crder.GVK),
-				Filename: path.Base(file),
-				Group:    crder.GVK.Group,
-				Version:  crder.GVK.Version,
-				Kind:     crder.GVK.Kind,
-			}
-			crds["github.com"+"/"+repo+"/"+crd.PrettyGVK(crder.GVK)] = cbytes
-		}
-		fileCount++
-	}
-	return repoData, crds, raw, nil
+	return repoData, nil
 }
 
 func splitYAML(greps []git.GrepResult, dir string) map[string][][]byte {
@@ -309,4 +190,23 @@ func splitYAML(greps []git.GrepResult, dir string) map[string][][]byte {
 		allCRDs[res.FileName] = bytes.Split(b, []byte("---"))
 	}
 	return allCRDs
+}
+
+func buildInsert(query string, argsPerInsert, numInsert int) string {
+	absArg := 1
+	for i := 0; i < numInsert; i++ {
+		query += "("
+		for j := 0; j < argsPerInsert; j++ {
+			query += "$" + fmt.Sprint(absArg)
+			if j != argsPerInsert-1 {
+				query += ","
+			}
+			absArg++
+		}
+		query += ")"
+		if i != numInsert-1 {
+			query += ","
+		}
+	}
+	return query
 }
