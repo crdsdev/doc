@@ -35,4 +35,5 @@ type RepoCRD struct {
 	Group    string
 	Version  string
 	Kind     string
+	CRD      []byte
 }
