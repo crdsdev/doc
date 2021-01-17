@@ -27,7 +27,7 @@ docker run -d \
   -instances=crossplane-dogfood:us-central1:test-123=tcp:0.0.0.0:5432 -credential_file=/config/cloudsql.json
 ```
 
-4. Verify you can connect:
+4. Setup doc database and tables:
 
 ```
 psql -h 127.0.0.1 -U postgres -d postgres -a -f schema/crds_up.sql
