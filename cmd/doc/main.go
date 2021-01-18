@@ -440,7 +440,7 @@ func parseGHURL(uPath string) (org, repo, group, version, kind, tag string, err 
 		return "", "", "", "", "", "", err
 	}
 	elements := strings.Split(strings.Trim(u.Path, "/"), "/")
-	if len(elements) < 4 {
+	if len(elements) < 6 {
 		return "", "", "", "", "", "", errors.New("invalid path")
 	}
 
