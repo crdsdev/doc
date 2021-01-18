@@ -5,7 +5,6 @@ go 1.13
 require (
 	github.com/go-git/go-git/v5 v5.0.0
 	github.com/go-openapi/spec v0.19.5 // indirect
-	github.com/go-redis/redis v6.15.7+incompatible
 	github.com/golang/protobuf v1.4.3 // indirect
 	github.com/google/go-cmp v0.5.2 // indirect
 	github.com/google/uuid v1.1.2
@@ -14,7 +13,7 @@ require (
 	github.com/imdario/mergo v0.3.7 // indirect
 	github.com/jackc/pgx/v4 v4.10.1
 	github.com/lib/pq v1.9.0 // indirect
-	github.com/onsi/gomega v1.8.1 // indirect
+	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5
 	github.com/unrolled/render v1.0.3
