@@ -16,18 +16,6 @@ limitations under the License.
 
 package models
 
-import (
-	"time"
-)
-
-// Repo is data for a Github repo.
-type Repo struct {
-	GithubURL  string
-	Tag        string
-	LastParsed time.Time
-	CRDs       map[string]RepoCRD
-}
-
 // RepoCRD is a CRD and data about its location in a repository.
 type RepoCRD struct {
 	Path     string
@@ -36,4 +24,11 @@ type RepoCRD struct {
 	Version  string
 	Kind     string
 	CRD      []byte
+}
+
+// GitterRepo is the repo for gitter to index.
+type GitterRepo struct {
+	Org  string
+	Repo string
+	Tag  string
 }

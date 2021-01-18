@@ -17,39 +17,48 @@ limitations under the License.
 package main
 
 import (
-	"encoding/json"
+	"context"
 	"errors"
 	"fmt"
 	"html/template"
 	"log"
 	"net/http"
+	"net/rpc"
 	"net/url"
 	"os"
 	"strings"
-	"time"
 
 	crdutil "github.com/crdsdev/doc/pkg/crd"
 	"github.com/crdsdev/doc/pkg/models"
-	"github.com/go-redis/redis"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
 	flag "github.com/spf13/pflag"
 	"github.com/unrolled/render"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
+	"sigs.k8s.io/yaml"
 )
 
-var redisClient *redis.Client
+var db *pgxpool.Pool
 
 // redis connection
 var (
-	envAddress     = "REDIS_HOST"
 	envAnalytics   = "ANALYTICS"
 	envDevelopment = "IS_DEV"
+
+	userEnv     = "PG_USER"
+	passwordEnv = "PG_PASS"
+	hostEnv     = "PG_HOST"
+	portEnv     = "PG_PORT"
+	dbEnv       = "PG_DB"
 
 	cookieDarkMode = "halfmoon_preferredMode"
 
 	address   string
 	analytics bool = false
+
+	gitterChan chan models.GitterRepo
 )
 
 // SchemaPlusParent is a JSON schema plus the name of the parent field.
@@ -98,13 +107,13 @@ type docData struct {
 }
 
 type orgData struct {
-	Page       pageData
-	Repo       string
-	Tag        string
-	At         string
-	CRDs       map[string]models.RepoCRD
-	Total      int
-	LastParsed string
+	Page  pageData
+	Repo  string
+	Tag   string
+	At    string
+	Tags  []string
+	CRDs  map[string]models.RepoCRD
+	Total int
 }
 
 type homeData struct {
@@ -112,22 +121,54 @@ type homeData struct {
 	Repos []string
 }
 
-func init() {
-	address = os.Getenv(envAddress)
+func worker(gitterChan <-chan models.GitterRepo) {
+	for job := range gitterChan {
+		client, err := rpc.DialHTTP("tcp", "127.0.0.1:1234")
+		if err != nil {
+			log.Fatal("dialing:", err)
+		}
+		reply := ""
+		if err := client.Call("Gitter.Index", job, &reply); err != nil {
+			log.Print("Could not index repo")
+		}
+	}
+}
 
+func tryIndex(repo models.GitterRepo, gitterChan chan models.GitterRepo) bool {
+	select {
+	case gitterChan <- repo:
+		return true
+	default:
+		return false
+	}
+}
+
+func init() {
 	// TODO(hasheddan): use a flag
 	analyticsStr := os.Getenv(envAnalytics)
 	if analyticsStr == "true" {
 		analytics = true
 	}
+
+	gitterChan = make(chan models.GitterRepo, 4)
 }
 
 func main() {
 	flag.Parse()
+	dsn := fmt.Sprintf("postgresql://%s:%s@%s:%s/%s", os.Getenv(userEnv), os.Getenv(passwordEnv), os.Getenv(hostEnv), os.Getenv(portEnv), os.Getenv(dbEnv))
+	conn, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		panic(err)
+	}
+	db, err = pgxpool.ConnectConfig(context.Background(), conn)
+	if err != nil {
+		panic(err)
+	}
 
-	redisClient = redis.NewClient(&redis.Options{
-		Addr: address + ":6379",
-	})
+	for i := 0; i < 4; i++ {
+		go worker(gitterChan)
+	}
+
 	start()
 }
 
@@ -159,11 +200,6 @@ func start() {
 
 func home(w http.ResponseWriter, r *http.Request) {
 	data := homeData{Page: getPageData(r, true)}
-	if res, err := redisClient.SMembers("repos:popular").Result(); err != nil {
-		log.Printf("failed to get popular repos : %v", err)
-	} else {
-		data.Repos = res
-	}
 	if err := page.HTML(w, http.StatusOK, "home", data); err != nil {
 		log.Printf("homeTemplate.Execute(): %v", err)
 		fmt.Fprint(w, "Unable to render home template.")
@@ -177,17 +213,40 @@ func raw(w http.ResponseWriter, r *http.Request) {
 	org := parameters["org"]
 	repo := parameters["repo"]
 	tag := parameters["tag"]
-	at := ""
-	if tag != "" {
-		at = "@"
-	}
-	res, err := redisClient.Get(strings.Join([]string{"raw/github.com", org, repo}, "/") + at + tag).Result()
-	if err != nil {
-		log.Printf("failed to get raw CRDs for %s : %v", repo, err)
-		fmt.Fprint(w, "Unable to render raw CRDs.")
+
+	var rows pgx.Rows
+	var err error
+	if tag == "" {
+		rows, err = db.Query(context.Background(), "SELECT c.data::jsonb FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE t.repo=$1 AND t.id = (SELECT id FROM tags WHERE repo = $1 ORDER BY time DESC LIMIT 1);", "github.com"+"/"+org+"/"+repo)
+		if err != nil {
+			log.Printf("failed to get raw CRDs for %s : %v", repo, err)
+			fmt.Fprint(w, "Unable to render raw CRDs.")
+		}
+	} else {
+		rows, err = db.Query(context.Background(), "SELECT c.data::jsonb FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE t.repo=$1 AND t.name=$2;", "github.com"+"/"+org+"/"+repo, tag)
+		if err != nil {
+			log.Printf("failed to get raw CRDs for %s : %v", repo, err)
+			fmt.Fprint(w, "Unable to render raw CRDs.")
+		}
 	}
 
-	w.Write([]byte(res))
+	var res []byte
+	var total []byte
+	for rows.Next() {
+		if err := rows.Scan(&res); err != nil {
+			log.Printf("failed to get raw CRDs for %s : %v", repo, err)
+			fmt.Fprint(w, "Unable to render raw CRDs.")
+		}
+		y, err := yaml.JSONToYAML(res)
+		if err != nil {
+			log.Printf("failed to get raw CRDs for %s : %v", repo, err)
+			fmt.Fprint(w, "Unable to render raw CRDs.")
+		}
+		total = append(total, y...)
+		total = append(total, []byte("\n---\n")...)
+	}
+
+	w.Write([]byte(total))
 	log.Printf("successfully rendered raw CRDs")
 
 	if analytics {
@@ -221,11 +280,16 @@ func org(w http.ResponseWriter, r *http.Request) {
 	org := parameters["org"]
 	repo := parameters["repo"]
 	tag := parameters["tag"]
-	at := ""
-	if tag != "" {
-		at = "@"
+	b := &pgx.Batch{}
+	if tag == "" {
+		b.Queue("SELECT t.name, c.group, c.version, c.kind FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE t.repo=$1 AND t.id = (SELECT id FROM tags WHERE repo = $1 ORDER BY time DESC LIMIT 1);", "github.com"+"/"+org+"/"+repo)
+	} else {
+		b.Queue("SELECT t.name, c.group, c.version, c.kind FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE t.repo=$1 AND t.name=$2;", "github.com"+"/"+org+"/"+repo, tag)
 	}
-	res, err := redisClient.Get(strings.Join([]string{"github.com", org, repo}, "/") + at + tag).Result()
+	b.Queue("SELECT name FROM tags WHERE repo=$1 ORDER BY time DESC;", "github.com"+"/"+org+"/"+repo)
+	br := db.SendBatch(context.Background(), b)
+	defer br.Close()
+	c, err := br.Query()
 	if err != nil {
 		log.Printf("failed to get CRDs for %s : %v", repo, err)
 		if err := page.HTML(w, http.StatusOK, "new", baseData{Page: getPageData(r, false)}); err != nil {
@@ -234,22 +298,65 @@ func org(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-
-	repoData := &models.Repo{}
-	bytes := []byte(res)
-	if err := json.Unmarshal(bytes, repoData); err != nil {
-		log.Printf("failed to get CRDs for %s : %v", repo, err)
-		page.HTML(w, http.StatusOK, "home", homeData{Page: getPageData(r, false)})
+	repoCRDs := map[string]models.RepoCRD{}
+	foundTag := tag
+	for c.Next() {
+		var t, g, v, k string
+		if err := c.Scan(&t, &g, &v, &k); err != nil {
+			log.Printf("newTemplate.Execute(): %v", err)
+			fmt.Fprint(w, "Unable to render new template.")
+		}
+		foundTag = t
+		repoCRDs[g+"/"+v+"/"+k] = models.RepoCRD{
+			Group:   g,
+			Version: v,
+			Kind:    k,
+		}
+	}
+	c, err = br.Query()
+	if err != nil {
+		log.Printf("failed to get tags for %s : %v", repo, err)
+		if err := page.HTML(w, http.StatusOK, "new", baseData{Page: getPageData(r, false)}); err != nil {
+			log.Printf("newTemplate.Execute(): %v", err)
+			fmt.Fprint(w, "Unable to render new template.")
+		}
 		return
 	}
+	tags := []string{}
+	tagExists := false
+	for c.Next() {
+		var t string
+		if err := c.Scan(&t); err != nil {
+			log.Printf("newTemplate.Execute(): %v", err)
+			fmt.Fprint(w, "Unable to render new template.")
+		}
+		if !tagExists && t == tag {
+			tagExists = true
+		}
+		tags = append(tags, t)
+	}
+	if len(tags) == 0 || (!tagExists && tag != "") {
+		tryIndex(models.GitterRepo{
+			Org:  org,
+			Repo: repo,
+			Tag:  tag,
+		}, gitterChan)
+		if err := page.HTML(w, http.StatusOK, "new", baseData{Page: getPageData(r, false)}); err != nil {
+			log.Printf("newTemplate.Execute(): %v", err)
+			fmt.Fprint(w, "Unable to render new template.")
+		}
+		return
+	}
+	if foundTag == "" {
+		foundTag = tags[0]
+	}
 	if err := page.HTML(w, http.StatusOK, "org", orgData{
-		Page:       getPageData(r, false),
-		Repo:       strings.Join([]string{org, repo}, "/"),
-		Tag:        tag,
-		At:         at,
-		CRDs:       repoData.CRDs,
-		Total:      len(repoData.CRDs),
-		LastParsed: repoData.LastParsed.Format(time.RFC1123Z),
+		Page:  getPageData(r, false),
+		Repo:  strings.Join([]string{org, repo}, "/"),
+		Tag:   foundTag,
+		Tags:  tags,
+		CRDs:  repoCRDs,
+		Total: len(repoCRDs),
 	}); err != nil {
 		log.Printf("orgTemplate.Execute(): %v", err)
 		fmt.Fprint(w, "Unable to render org template.")
@@ -262,32 +369,26 @@ func doc(w http.ResponseWriter, r *http.Request) {
 	var schema *apiextensions.CustomResourceValidation
 	crd := &apiextensions.CustomResourceDefinition{}
 	log.Printf("Request Received: %s\n", r.URL.Path)
-	org, repo, tag, err := parseGHURL(r.URL.Path)
+	org, repo, group, kind, version, tag, err := parseGHURL(r.URL.Path)
 	if err != nil {
 		log.Printf("failed to parse Github path: %v", err)
 		fmt.Fprint(w, "Invalid URL.")
 		return
 	}
-	at := ""
-	if tag != "" {
-		at = "@"
+	var c pgx.Row
+	if tag == "" {
+		c = db.QueryRow(context.Background(), "SELECT t.name, c.data::jsonb FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE t.repo=$1 AND t.id = (SELECT id FROM tags WHERE repo = $1 ORDER BY time DESC LIMIT 1) AND c.group=$2 AND c.version=$3 AND c.kind=$4;", "github.com"+"/"+org+"/"+repo, group, version, kind)
+	} else {
+		c = db.QueryRow(context.Background(), "SELECT t.name, c.data::jsonb FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE t.repo=$1 AND t.name=$2 AND c.group=$3 AND c.version=$4 AND c.kind=$5;", "github.com"+"/"+org+"/"+repo, tag, group, version, kind)
 	}
-	res, err := redisClient.Get(strings.Trim(r.URL.Path, "/")).Result()
-	if err != nil {
+	foundTag := tag
+	if err := c.Scan(&foundTag, crd); err != nil {
 		log.Printf("failed to get CRDs for %s : %v", repo, err)
 		if err := page.HTML(w, http.StatusOK, "doc", baseData{Page: getPageData(r, false)}); err != nil {
 			log.Printf("newTemplate.Execute(): %v", err)
 			fmt.Fprint(w, "Unable to render new template.")
 		}
-		return
 	}
-
-	if err := json.Unmarshal([]byte(res), crd); err != nil {
-		log.Printf("failed to convert to CRD: %v", err)
-		fmt.Fprint(w, "Supplied file is not a valid CRD.")
-		return
-	}
-
 	schema = crd.Spec.Validation
 	if len(crd.Spec.Versions) > 1 {
 		for _, version := range crd.Spec.Versions {
@@ -316,8 +417,7 @@ func doc(w http.ResponseWriter, r *http.Request) {
 	if err := page.HTML(w, http.StatusOK, "doc", docData{
 		Page:        getPageData(r, false),
 		Repo:        strings.Join([]string{org, repo}, "/"),
-		Tag:         tag,
-		At:          at,
+		Tag:         foundTag,
 		Group:       gvk.Group,
 		Version:     gvk.Version,
 		Kind:        gvk.Kind,
@@ -332,14 +432,14 @@ func doc(w http.ResponseWriter, r *http.Request) {
 }
 
 // TODO(hasheddan): add testing and more reliable parse
-func parseGHURL(uPath string) (org, repo, tag string, err error) {
+func parseGHURL(uPath string) (org, repo, group, version, kind, tag string, err error) {
 	u, err := url.Parse(uPath)
 	if err != nil {
-		return "", "", "", err
+		return "", "", "", "", "", "", err
 	}
 	elements := strings.Split(strings.Trim(u.Path, "/"), "/")
-	if len(elements) < 4 {
-		return "", "", "", errors.New("invalid path")
+	if len(elements) < 6 {
+		return "", "", "", "", "", "", errors.New("invalid path")
 	}
 
 	tagSplit := strings.Split(u.Path, "@")
@@ -347,5 +447,5 @@ func parseGHURL(uPath string) (org, repo, tag string, err error) {
 		tag = tagSplit[1]
 	}
 
-	return elements[1], elements[2], tag, nil
+	return elements[1], elements[2], elements[3], elements[4], strings.Split(elements[5], "@")[0], tag, nil
 }
