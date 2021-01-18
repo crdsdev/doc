@@ -22,6 +22,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
+	"net/http"
+	"net/rpc"
 	"os"
 	"path"
 	"regexp"
@@ -31,12 +34,15 @@ import (
 	"github.com/crdsdev/doc/pkg/models"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/pkg/errors"
 	"gopkg.in/square/go-jose.v2/json"
 )
 
 const (
-	crdArgCount = 7
+	crdArgCount = 6
 
 	userEnv     = "PG_USER"
 	passwordEnv = "PG_PASS"
@@ -45,88 +51,133 @@ const (
 	dbEnv       = "PG_DB"
 )
 
-var (
-	// TODO(hasheddan): temporarily hard-coded
-	repos = []string{"crossplane/crossplane"}
-)
-
 func main() {
-	dir, err := os.Getwd()
-	if err != nil {
-		panic(err)
-	}
-	cloneDir := fmt.Sprintf("%s/%s", dir, "tmp-git")
-	if err := os.Mkdir(cloneDir, os.FileMode(0755)); err != nil {
-		panic(err)
-	}
-	defer os.RemoveAll(cloneDir)
-
 	dsn := fmt.Sprintf("postgresql://%s:%s@%s:%s/%s", os.Getenv(userEnv), os.Getenv(passwordEnv), os.Getenv(hostEnv), os.Getenv(portEnv), os.Getenv(dbEnv))
-	conn, err := pgx.Connect(context.Background(), dsn)
+	conn, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		panic(err)
 	}
-
-	if err := gitter(repos, conn); err != nil {
+	pool, err := pgxpool.ConnectConfig(context.Background(), conn)
+	if err != nil {
 		panic(err)
 	}
+	gitter := &Gitter{
+		conn: pool,
+	}
+	rpc.Register(gitter)
+	rpc.HandleHTTP()
+	l, e := net.Listen("tcp", ":1234")
+	if e != nil {
+		log.Fatal("listen error:", e)
+	}
+	log.Println("Starting gitter...")
+	http.Serve(l, nil)
 }
 
-func gitter(repos []string, conn *pgx.Conn) error {
-	log.Println("Starting gitter...")
-	for _, repoURL := range repos {
-		log.Printf("Indexing repo %s...\n", repoURL)
-		dir, err := ioutil.TempDir(os.TempDir(), "doc-gitter")
-		if err != nil {
-			return err
-		}
-		defer os.RemoveAll(dir)
-		repo, err := git.PlainClone(dir, false, &git.CloneOptions{
-			URL: fmt.Sprintf("https://github.com/%s", repoURL),
-		})
-		if err != nil {
-			return err
-		}
-		iter, err := repo.Tags()
-		if err != nil {
-			return err
-		}
-		w, err := repo.Worktree()
-		if err != nil {
-			return err
-		}
-		// Get CRDs for each tag
-		if err := iter.ForEach(func(obj *plumbing.Reference) error {
-			h, err := repo.ResolveRevision(plumbing.Revision(obj.Hash().String()))
-			if err != nil || h == nil {
-				log.Printf("Unable to resolve revision: %s (%v)", obj.Hash().String(), err)
-				return nil
-			}
-			repoCrds, err := getCRDsFromTag(repoURL, dir, obj.Name().Short(), h, w)
-			if err != nil {
-				log.Printf("Unable to get CRDs: %s@%s (%v)", repoURL, obj.Name().Short(), err)
-				return nil
-			}
-			if len(repoCrds.CRDs) > 0 {
-				allArgs := make([]interface{}, 0, len(repoCrds.CRDs)*crdArgCount)
-				for _, crd := range repoCrds.CRDs {
-					allArgs = append(allArgs, crd.Group, crd.Version, crd.Kind, repoCrds.GithubURL, repoCrds.Tag, crd.Filename, crd.CRD)
-				}
-				if _, err := conn.Exec(context.Background(), buildInsert("INSERT INTO crds(\"group\", version, kind, repo, tag, filename, data) VALUES ", crdArgCount, len(repoCrds.CRDs)), allArgs...); err != nil {
-					panic(err)
-				}
-			}
+// Gitter indexes git repos.
+type Gitter struct {
+	conn *pgxpool.Pool
+}
+
+type tag struct {
+	timestamp time.Time
+	hash      plumbing.Hash
+	name      string
+}
+
+// Index indexes a git repo at the specified url.
+func (g *Gitter) Index(gRepo models.GitterRepo, reply *string) error {
+	log.Printf("Indexing repo %s/%s...\n", gRepo.Org, gRepo.Repo)
+
+	dir, err := ioutil.TempDir(os.TempDir(), "doc-gitter")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(dir)
+	cloneOpts := &git.CloneOptions{
+		URL:               fmt.Sprintf("https://github.com/%s/%s", gRepo.Org, gRepo.Repo),
+		Depth:             1,
+		Progress:          os.Stdout,
+		RecurseSubmodules: git.NoRecurseSubmodules,
+	}
+	if gRepo.Tag != "" {
+		cloneOpts.ReferenceName = plumbing.NewTagReferenceName(gRepo.Tag)
+		cloneOpts.SingleBranch = true
+	}
+	repo, err := git.PlainClone(dir, false, cloneOpts)
+	if err != nil {
+		return err
+	}
+	iter, err := repo.TagObjects()
+	if err != nil {
+		return err
+	}
+	w, err := repo.Worktree()
+	if err != nil {
+		return err
+	}
+	// Get CRDs for each tag
+	tags := []tag{}
+	if err := iter.ForEach(func(obj *object.Tag) error {
+		if gRepo.Tag == "" {
+			tags = append(tags, tag{
+				timestamp: obj.Tagger.When,
+				hash:      obj.Target,
+				name:      obj.Name,
+			})
 			return nil
-		}); err != nil {
-			log.Printf("Failed indexing %s, continuing to other repos: %v", repoURL, err)
+		}
+		if obj.Name == gRepo.Tag {
+			tags = append(tags, tag{
+				timestamp: obj.Tagger.When,
+				hash:      obj.Target,
+				name:      obj.Name,
+			})
+			iter.Close()
+		}
+		return nil
+	}); err != nil {
+		log.Println(err)
+	}
+	for _, t := range tags {
+		r := g.conn.QueryRow(context.Background(), "SELECT id FROM tags WHERE name=$1 AND repo=$2", t.name, "github.com/"+gRepo.Org+"/"+gRepo.Repo)
+		var tagID int
+		if err := r.Scan(&tagID); err != nil {
+			if !errors.Is(err, pgx.ErrNoRows) {
+				return err
+			}
+			r := g.conn.QueryRow(context.Background(), "INSERT INTO tags(name, repo, time) VALUES ($1, $2, $3) RETURNING id", t.name, "github.com/"+gRepo.Org+"/"+gRepo.Repo, t.timestamp)
+			if err := r.Scan(&tagID); err != nil {
+				return err
+			}
+		}
+		h, err := repo.ResolveRevision(plumbing.Revision(t.hash.String()))
+		if err != nil || h == nil {
+			log.Printf("Unable to resolve revision: %s (%v)", t.hash.String(), err)
 			continue
 		}
+		repoCRDs, err := getCRDsFromTag(gRepo.Org+"/"+gRepo.Repo, dir, t.name, h, w)
+		if err != nil {
+			log.Printf("Unable to get CRDs: %s@%s (%v)", repo, t.name, err)
+			continue
+		}
+		if len(repoCRDs) > 0 {
+			allArgs := make([]interface{}, 0, len(repoCRDs)*crdArgCount)
+			for _, crd := range repoCRDs {
+				allArgs = append(allArgs, crd.Group, crd.Version, crd.Kind, tagID, crd.Filename, crd.CRD)
+			}
+			if _, err := g.conn.Exec(context.Background(), buildInsert("INSERT INTO crds(\"group\", version, kind, tag_id, filename, data) VALUES ", crdArgCount, len(repoCRDs))+"ON CONFLICT DO NOTHING", allArgs...); err != nil {
+				return err
+			}
+		}
 	}
+
+	log.Printf("Finished indexing %s/%s\n", gRepo.Org, gRepo.Repo)
 
 	return nil
 }
 
-func getCRDsFromTag(repo string, dir string, tag string, hash *plumbing.Hash, w *git.Worktree) (*models.Repo, error) {
+func getCRDsFromTag(repo string, dir string, tag string, hash *plumbing.Hash, w *git.Worktree) (map[string]models.RepoCRD, error) {
 	err := w.Checkout(&git.CheckoutOptions{
 		Hash:  *hash,
 		Force: true,
@@ -145,14 +196,8 @@ func getCRDsFromTag(repo string, dir string, tag string, hash *plumbing.Hash, w 
 		Patterns:  []*regexp.Regexp{reg},
 		PathSpecs: []*regexp.Regexp{regPath},
 	})
-	repoData := &models.Repo{
-		GithubURL:  "github.com" + "/" + repo,
-		Tag:        tag,
-		LastParsed: time.Now(),
-		CRDs:       map[string]models.RepoCRD{},
-	}
+	repoCRDs := map[string]models.RepoCRD{}
 	files := splitYAML(g, dir)
-	fileCount := 0
 	for file, yamls := range files {
 		for _, y := range yamls {
 			crder, err := crd.NewCRDer(y, crd.StripLabels(), crd.StripAnnotations(), crd.StripConversion())
@@ -163,7 +208,7 @@ func getCRDsFromTag(repo string, dir string, tag string, hash *plumbing.Hash, w 
 			if err != nil {
 				continue
 			}
-			repoData.CRDs[crd.PrettyGVK(crder.GVK)] = models.RepoCRD{
+			repoCRDs[crd.PrettyGVK(crder.GVK)] = models.RepoCRD{
 				Path:     crd.PrettyGVK(crder.GVK),
 				Filename: path.Base(file),
 				Group:    crder.GVK.Group,
@@ -172,9 +217,8 @@ func getCRDsFromTag(repo string, dir string, tag string, hash *plumbing.Hash, w 
 				CRD:      cbytes,
 			}
 		}
-		fileCount++
 	}
-	return repoData, nil
+	return repoCRDs, nil
 }
 
 func splitYAML(greps []git.GrepResult, dir string) map[string][][]byte {
