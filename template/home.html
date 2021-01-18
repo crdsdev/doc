@@ -10,14 +10,6 @@
             <p class="text-center">doc.crds.dev is and always will be <a href="https://github.com/crdsdev/doc">free and open source</a>.</p>
         </div>
         <p>To find a repo, search <kbd>github.com/{org}/{repo}</kbd>. You may optionally append <kbd>@{version}</kbd> to view documentation for a specific version of the project. For example: <a href="/github.com/crossplane/crossplane@v0.10.0">github.com/crossplane/crossplane@v0.10.0</a>. If you do not include a tag, the latest from <kbd>master</kbd> will be served.</p>
-        {{ if gt (len .Repos) 0}}
-        <h3>Recently Viewed Projects</h3>
-        {{ end }}
-        <div class="org-links">
-        {{ range $name := .Repos }}
-        <a href="/github.com/{{ $name }}"><span class="org-link">github.com/{{ $name }}</span></a>
-        {{ end }}
-        </div>
     </div>
 </div>
 
