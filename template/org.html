@@ -23,18 +23,14 @@
     const { html } = htmReact;
     const { useTable, useSortBy, useGlobalFilter  } = ReactTable;
 
-    const { Repo, CRDs, Tag, At, LastParsed } = JSON.parse(`{{ . }}`);
+    const { Repo, CRDs, Tag, At, } = JSON.parse(`{{ . }}`);
     const data = Object.keys(CRDs).map(key => CRDs[key]);
-
-    const parsedAtElem = document.getElementById('parsedAt');
-    parsedAtElem.textContent = formatRelative(new Date(LastParsed), new Date());
-    parsedAtElem.title = LastParsed;
 
     const columns = [
         {
             Header: 'Kind',
             accessor: 'Kind',
-            Cell: ({ row: { original }, value }) => html`<a href=${`/github.com/${Repo}/${original.Path}${At}${Tag}`}>${value}</a>`
+            Cell: ({ row: { original }, value }) => html`<a href=${`/github.com/${Repo}/${original.Group}/${original.Kind}/${original.Version}${At}${Tag}`}>${value}</a>`
         },
         {
             Header: 'Group',
