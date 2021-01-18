@@ -8,12 +8,27 @@
                 <a href="https://github.com/{{ .Repo }}/tree/master"><span class="label label-primary">github.com/{{ .Repo }}/tree/master</span></a>
             {{ end }}
         </div>
+        <select class="form-control w-md-400 w-sm-full mb-md-10 mb-5" onchange="handleSelect(this)">
+            {{ $actual := .Tag }}{{ $repo := .Repo }}{{ range $name := .Tags }}
+                {{ if eq $name $actual }}
+                <option value="/github.com/{{ $repo }}@{{ $name }}" selected="selected">{{ $name }}</option>
+                {{ else }}
+                <option value="/github.com/{{ $repo }}@{{ $name }}" >{{ $name }}</option>
+                {{ end }}
+            {{ end }}
+          </select>
         <p>CRDs discovered: <b>{{ .Total }}</b></p>
         <div id="crds"></div>
     </div>
 </div>
 
 {{ template "_scripts" . }}
+<script type="text/javascript">
+    function handleSelect(elm)
+    {
+       window.location = elm.value;
+    }
+  </script>
 <script src="https://unpkg.com/react-table@7/dist/react-table.production.min.js"></script>
 <script type="module">
     import { formatRelative } from 'https://esm.run/date-fns';
