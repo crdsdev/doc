@@ -34,7 +34,6 @@ import (
 	"github.com/crdsdev/doc/pkg/models"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/pkg/errors"
@@ -108,7 +107,7 @@ func (g *Gitter) Index(gRepo models.GitterRepo, reply *string) error {
 	if err != nil {
 		return err
 	}
-	iter, err := repo.TagObjects()
+	iter, err := repo.Tags()
 	if err != nil {
 		return err
 	}
@@ -118,20 +117,18 @@ func (g *Gitter) Index(gRepo models.GitterRepo, reply *string) error {
 	}
 	// Get CRDs for each tag
 	tags := []tag{}
-	if err := iter.ForEach(func(obj *object.Tag) error {
+	if err := iter.ForEach(func(obj *plumbing.Reference) error {
 		if gRepo.Tag == "" {
 			tags = append(tags, tag{
-				timestamp: obj.Tagger.When,
-				hash:      obj.Target,
-				name:      obj.Name,
+				hash: obj.Hash(),
+				name: obj.Name().Short(),
 			})
 			return nil
 		}
-		if obj.Name == gRepo.Tag {
+		if obj.Name().Short() == gRepo.Tag {
 			tags = append(tags, tag{
-				timestamp: obj.Tagger.When,
-				hash:      obj.Target,
-				name:      obj.Name,
+				hash: obj.Hash(),
+				name: obj.Name().Short(),
 			})
 			iter.Close()
 		}
@@ -140,21 +137,26 @@ func (g *Gitter) Index(gRepo models.GitterRepo, reply *string) error {
 		log.Println(err)
 	}
 	for _, t := range tags {
+		h, err := repo.ResolveRevision(plumbing.Revision(t.hash.String()))
+		if err != nil || h == nil {
+			log.Printf("Unable to resolve revision: %s (%v)", t.hash.String(), err)
+			continue
+		}
+		c, err := repo.CommitObject(*h)
+		if err != nil || c == nil {
+			log.Printf("Unable to resolve revision: %s (%v)", t.hash.String(), err)
+			continue
+		}
 		r := g.conn.QueryRow(context.Background(), "SELECT id FROM tags WHERE name=$1 AND repo=$2", t.name, "github.com/"+gRepo.Org+"/"+gRepo.Repo)
 		var tagID int
 		if err := r.Scan(&tagID); err != nil {
 			if !errors.Is(err, pgx.ErrNoRows) {
 				return err
 			}
-			r := g.conn.QueryRow(context.Background(), "INSERT INTO tags(name, repo, time) VALUES ($1, $2, $3) RETURNING id", t.name, "github.com/"+gRepo.Org+"/"+gRepo.Repo, t.timestamp)
+			r := g.conn.QueryRow(context.Background(), "INSERT INTO tags(name, repo, time) VALUES ($1, $2, $3) RETURNING id", t.name, "github.com/"+gRepo.Org+"/"+gRepo.Repo, c.Committer.When)
 			if err := r.Scan(&tagID); err != nil {
 				return err
 			}
-		}
-		h, err := repo.ResolveRevision(plumbing.Revision(t.hash.String()))
-		if err != nil || h == nil {
-			log.Printf("Unable to resolve revision: %s (%v)", t.hash.String(), err)
-			continue
 		}
 		repoCRDs, err := getCRDsFromTag(gRepo.Org+"/"+gRepo.Repo, dir, t.name, h, w)
 		if err != nil {
