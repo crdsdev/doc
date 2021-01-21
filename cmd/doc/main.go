@@ -37,6 +37,7 @@ import (
 	flag "github.com/spf13/pflag"
 	"github.com/unrolled/render"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"sigs.k8s.io/yaml"
 )
 
@@ -218,36 +219,40 @@ func raw(w http.ResponseWriter, r *http.Request) {
 	var err error
 	if tag == "" {
 		rows, err = db.Query(context.Background(), "SELECT c.data::jsonb FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE t.repo=$1 AND t.id = (SELECT id FROM tags WHERE repo = $1 ORDER BY time DESC LIMIT 1);", "github.com"+"/"+org+"/"+repo)
-		if err != nil {
-			log.Printf("failed to get raw CRDs for %s : %v", repo, err)
-			fmt.Fprint(w, "Unable to render raw CRDs.")
-		}
 	} else {
 		rows, err = db.Query(context.Background(), "SELECT c.data::jsonb FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE t.repo=$1 AND t.name=$2;", "github.com"+"/"+org+"/"+repo, tag)
-		if err != nil {
-			log.Printf("failed to get raw CRDs for %s : %v", repo, err)
-			fmt.Fprint(w, "Unable to render raw CRDs.")
-		}
 	}
 
 	var res []byte
 	var total []byte
-	for rows.Next() {
+	for err == nil && rows.Next() {
 		if err := rows.Scan(&res); err != nil {
-			log.Printf("failed to get raw CRDs for %s : %v", repo, err)
-			fmt.Fprint(w, "Unable to render raw CRDs.")
+			break
 		}
-		y, err := yaml.JSONToYAML(res)
+		crd := &apiextensions.CustomResourceDefinition{}
+		if err := yaml.Unmarshal(res, crd); err != nil {
+			break
+		}
+		crdv1 := &v1.CustomResourceDefinition{}
+		if err := v1.Convert_apiextensions_CustomResourceDefinition_To_v1_CustomResourceDefinition(crd, crdv1, nil); err != nil {
+			break
+		}
+		crdv1.SetGroupVersionKind(v1.SchemeGroupVersion.WithKind("CustomResourceDefinition"))
+		y, err := yaml.Marshal(crdv1)
 		if err != nil {
-			log.Printf("failed to get raw CRDs for %s : %v", repo, err)
-			fmt.Fprint(w, "Unable to render raw CRDs.")
+			break
 		}
 		total = append(total, y...)
 		total = append(total, []byte("\n---\n")...)
 	}
 
-	w.Write([]byte(total))
-	log.Printf("successfully rendered raw CRDs")
+	if err != nil {
+		fmt.Fprint(w, "Unable to render raw CRDs.")
+		log.Printf("failed to get raw CRDs for %s : %v", repo, err)
+	} else {
+		w.Write([]byte(total))
+		log.Printf("successfully rendered raw CRDs")
+	}
 
 	if analytics {
 		u := uuid.New().String()
