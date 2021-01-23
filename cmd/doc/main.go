@@ -89,6 +89,7 @@ type pageData struct {
 	Analytics     bool
 	DisableNavBar bool
 	IsDarkMode    bool
+	Title         string
 }
 
 type baseData struct {
@@ -173,7 +174,7 @@ func main() {
 	start()
 }
 
-func getPageData(r *http.Request, disableNavBar bool) pageData {
+func getPageData(r *http.Request, title string, disableNavBar bool) pageData {
 	var isDarkMode = false
 	if cookie, err := r.Cookie(cookieDarkMode); err == nil && cookie.Value == "dark-mode" {
 		isDarkMode = true
@@ -182,6 +183,7 @@ func getPageData(r *http.Request, disableNavBar bool) pageData {
 		Analytics:     analytics,
 		IsDarkMode:    isDarkMode,
 		DisableNavBar: disableNavBar,
+		Title:         title,
 	}
 }
 
@@ -200,7 +202,7 @@ func start() {
 }
 
 func home(w http.ResponseWriter, r *http.Request) {
-	data := homeData{Page: getPageData(r, true)}
+	data := homeData{Page: getPageData(r, "Doc", true)}
 	if err := page.HTML(w, http.StatusOK, "home", data); err != nil {
 		log.Printf("homeTemplate.Execute(): %v", err)
 		fmt.Fprint(w, "Unable to render home template.")
@@ -285,10 +287,12 @@ func org(w http.ResponseWriter, r *http.Request) {
 	org := parameters["org"]
 	repo := parameters["repo"]
 	tag := parameters["tag"]
+	pageData := getPageData(r, fmt.Sprintf("%s/%s", org, repo), false)
 	b := &pgx.Batch{}
 	if tag == "" {
 		b.Queue("SELECT t.name, c.group, c.version, c.kind FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE t.repo=$1 AND t.id = (SELECT id FROM tags WHERE repo = $1 ORDER BY time DESC LIMIT 1);", "github.com"+"/"+org+"/"+repo)
 	} else {
+		pageData.Title += fmt.Sprintf("@%s", tag)
 		b.Queue("SELECT t.name, c.group, c.version, c.kind FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE t.repo=$1 AND t.name=$2;", "github.com"+"/"+org+"/"+repo, tag)
 	}
 	b.Queue("SELECT name FROM tags WHERE repo=$1 ORDER BY time DESC;", "github.com"+"/"+org+"/"+repo)
@@ -297,7 +301,7 @@ func org(w http.ResponseWriter, r *http.Request) {
 	c, err := br.Query()
 	if err != nil {
 		log.Printf("failed to get CRDs for %s : %v", repo, err)
-		if err := page.HTML(w, http.StatusOK, "new", baseData{Page: getPageData(r, false)}); err != nil {
+		if err := page.HTML(w, http.StatusOK, "new", baseData{Page: pageData}); err != nil {
 			log.Printf("newTemplate.Execute(): %v", err)
 			fmt.Fprint(w, "Unable to render new template.")
 		}
@@ -321,7 +325,7 @@ func org(w http.ResponseWriter, r *http.Request) {
 	c, err = br.Query()
 	if err != nil {
 		log.Printf("failed to get tags for %s : %v", repo, err)
-		if err := page.HTML(w, http.StatusOK, "new", baseData{Page: getPageData(r, false)}); err != nil {
+		if err := page.HTML(w, http.StatusOK, "new", baseData{Page: pageData}); err != nil {
 			log.Printf("newTemplate.Execute(): %v", err)
 			fmt.Fprint(w, "Unable to render new template.")
 		}
@@ -346,7 +350,7 @@ func org(w http.ResponseWriter, r *http.Request) {
 			Repo: repo,
 			Tag:  tag,
 		}, gitterChan)
-		if err := page.HTML(w, http.StatusOK, "new", baseData{Page: getPageData(r, false)}); err != nil {
+		if err := page.HTML(w, http.StatusOK, "new", baseData{Page: pageData}); err != nil {
 			log.Printf("newTemplate.Execute(): %v", err)
 			fmt.Fprint(w, "Unable to render new template.")
 		}
@@ -356,7 +360,7 @@ func org(w http.ResponseWriter, r *http.Request) {
 		foundTag = tags[0]
 	}
 	if err := page.HTML(w, http.StatusOK, "org", orgData{
-		Page:  getPageData(r, false),
+		Page:  pageData,
 		Repo:  strings.Join([]string{org, repo}, "/"),
 		Tag:   foundTag,
 		Tags:  tags,
@@ -380,6 +384,7 @@ func doc(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "Invalid URL.")
 		return
 	}
+	pageData := getPageData(r, fmt.Sprintf("%s.%s/%s", kind, group, version), false)
 	var c pgx.Row
 	if tag == "" {
 		c = db.QueryRow(context.Background(), "SELECT t.name, c.data::jsonb FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE t.repo=$1 AND t.id = (SELECT id FROM tags WHERE repo = $1 ORDER BY time DESC LIMIT 1) AND c.group=$2 AND c.version=$3 AND c.kind=$4;", "github.com"+"/"+org+"/"+repo, group, version, kind)
@@ -389,7 +394,7 @@ func doc(w http.ResponseWriter, r *http.Request) {
 	foundTag := tag
 	if err := c.Scan(&foundTag, crd); err != nil {
 		log.Printf("failed to get CRDs for %s : %v", repo, err)
-		if err := page.HTML(w, http.StatusOK, "doc", baseData{Page: getPageData(r, false)}); err != nil {
+		if err := page.HTML(w, http.StatusOK, "doc", baseData{Page: pageData}); err != nil {
 			log.Printf("newTemplate.Execute(): %v", err)
 			fmt.Fprint(w, "Unable to render new template.")
 		}
@@ -420,7 +425,7 @@ func doc(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := page.HTML(w, http.StatusOK, "doc", docData{
-		Page:        getPageData(r, false),
+		Page:        pageData,
 		Repo:        strings.Join([]string{org, repo}, "/"),
 		Tag:         foundTag,
 		Group:       gvk.Group,
