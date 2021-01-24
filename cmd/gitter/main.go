@@ -28,6 +28,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/crdsdev/doc/pkg/crd"
@@ -93,8 +94,9 @@ func (g *Gitter) Index(gRepo models.GitterRepo, reply *string) error {
 		return err
 	}
 	defer os.RemoveAll(dir)
+	fullRepo := fmt.Sprintf("%s/%s/%s", "github.com", strings.ToLower(gRepo.Org), strings.ToLower(gRepo.Repo))
 	cloneOpts := &git.CloneOptions{
-		URL:               fmt.Sprintf("https://github.com/%s/%s", gRepo.Org, gRepo.Repo),
+		URL:               fmt.Sprintf("https://%s", fullRepo),
 		Depth:             1,
 		Progress:          os.Stdout,
 		RecurseSubmodules: git.NoRecurseSubmodules,
@@ -147,13 +149,13 @@ func (g *Gitter) Index(gRepo models.GitterRepo, reply *string) error {
 			log.Printf("Unable to resolve revision: %s (%v)", t.hash.String(), err)
 			continue
 		}
-		r := g.conn.QueryRow(context.Background(), "SELECT id FROM tags WHERE name=$1 AND repo=$2", t.name, "github.com/"+gRepo.Org+"/"+gRepo.Repo)
+		r := g.conn.QueryRow(context.Background(), "SELECT id FROM tags WHERE name=$1 AND repo=$2", t.name, fullRepo)
 		var tagID int
 		if err := r.Scan(&tagID); err != nil {
 			if !errors.Is(err, pgx.ErrNoRows) {
 				return err
 			}
-			r := g.conn.QueryRow(context.Background(), "INSERT INTO tags(name, repo, time) VALUES ($1, $2, $3) RETURNING id", t.name, "github.com/"+gRepo.Org+"/"+gRepo.Repo, c.Committer.When)
+			r := g.conn.QueryRow(context.Background(), "INSERT INTO tags(name, repo, time) VALUES ($1, $2, $3) RETURNING id", t.name, fullRepo, c.Committer.When)
 			if err := r.Scan(&tagID); err != nil {
 				return err
 			}
