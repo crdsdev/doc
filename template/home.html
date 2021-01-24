@@ -24,7 +24,9 @@
         const input = useRef(null);
 
         const onSubmit = e => {
-            window.location.assign(`/${url}`);
+            const urlParts = url.split("/");
+            urlParts[0] = urlParts[0].toLowerCase();
+            window.location.assign(`/${urlParts.join("/")}`);
             e.preventDefault();
         };
 
