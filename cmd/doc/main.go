@@ -217,12 +217,13 @@ func raw(w http.ResponseWriter, r *http.Request) {
 	repo := parameters["repo"]
 	tag := parameters["tag"]
 
+	fullRepo := fmt.Sprintf("%s/%s/%s", "github.com", org, repo)
 	var rows pgx.Rows
 	var err error
 	if tag == "" {
-		rows, err = db.Query(context.Background(), "SELECT c.data::jsonb FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE t.repo=$1 AND t.id = (SELECT id FROM tags WHERE repo = $1 ORDER BY time DESC LIMIT 1);", "github.com"+"/"+org+"/"+repo)
+		rows, err = db.Query(context.Background(), "SELECT c.data::jsonb FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE LOWER(t.repo)=LOWER($1) AND t.id = (SELECT id FROM tags WHERE LOWER(repo) = LOWER($1) ORDER BY time DESC LIMIT 1);", fullRepo)
 	} else {
-		rows, err = db.Query(context.Background(), "SELECT c.data::jsonb FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE t.repo=$1 AND t.name=$2;", "github.com"+"/"+org+"/"+repo, tag)
+		rows, err = db.Query(context.Background(), "SELECT c.data::jsonb FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE LOWER(t.repo)=LOWER($1) AND t.name=$2;", fullRepo, tag)
 	}
 
 	var res []byte
@@ -288,14 +289,15 @@ func org(w http.ResponseWriter, r *http.Request) {
 	repo := parameters["repo"]
 	tag := parameters["tag"]
 	pageData := getPageData(r, fmt.Sprintf("%s/%s", org, repo), false)
+	fullRepo := fmt.Sprintf("%s/%s/%s", "github.com", org, repo)
 	b := &pgx.Batch{}
 	if tag == "" {
-		b.Queue("SELECT t.name, c.group, c.version, c.kind FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE t.repo=$1 AND t.id = (SELECT id FROM tags WHERE repo = $1 ORDER BY time DESC LIMIT 1);", "github.com"+"/"+org+"/"+repo)
+		b.Queue("SELECT t.name, c.group, c.version, c.kind FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE LOWER(t.repo)=LOWER($1) AND t.id = (SELECT id FROM tags WHERE LOWER(repo) = LOWER($1) ORDER BY time DESC LIMIT 1);", fullRepo)
 	} else {
 		pageData.Title += fmt.Sprintf("@%s", tag)
-		b.Queue("SELECT t.name, c.group, c.version, c.kind FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE t.repo=$1 AND t.name=$2;", "github.com"+"/"+org+"/"+repo, tag)
+		b.Queue("SELECT t.name, c.group, c.version, c.kind FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE LOWER(t.repo)=LOWER($1) AND t.name=$2;", fullRepo, tag)
 	}
-	b.Queue("SELECT name FROM tags WHERE repo=$1 ORDER BY time DESC;", "github.com"+"/"+org+"/"+repo)
+	b.Queue("SELECT name FROM tags WHERE LOWER(repo)=LOWER($1) ORDER BY time DESC;", fullRepo)
 	br := db.SendBatch(context.Background(), b)
 	defer br.Close()
 	c, err := br.Query()
@@ -385,11 +387,12 @@ func doc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pageData := getPageData(r, fmt.Sprintf("%s.%s/%s", kind, group, version), false)
+	fullRepo := fmt.Sprintf("%s/%s/%s", "github.com", org, repo)
 	var c pgx.Row
 	if tag == "" {
-		c = db.QueryRow(context.Background(), "SELECT t.name, c.data::jsonb FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE t.repo=$1 AND t.id = (SELECT id FROM tags WHERE repo = $1 ORDER BY time DESC LIMIT 1) AND c.group=$2 AND c.version=$3 AND c.kind=$4;", "github.com"+"/"+org+"/"+repo, group, version, kind)
+		c = db.QueryRow(context.Background(), "SELECT t.name, c.data::jsonb FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE LOWER(t.repo)=LOWER($1) AND t.id = (SELECT id FROM tags WHERE repo = $1 ORDER BY time DESC LIMIT 1) AND c.group=$2 AND c.version=$3 AND c.kind=$4;", fullRepo, group, version, kind)
 	} else {
-		c = db.QueryRow(context.Background(), "SELECT t.name, c.data::jsonb FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE t.repo=$1 AND t.name=$2 AND c.group=$3 AND c.version=$4 AND c.kind=$5;", "github.com"+"/"+org+"/"+repo, tag, group, version, kind)
+		c = db.QueryRow(context.Background(), "SELECT t.name, c.data::jsonb FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE LOWER(t.repo)=LOWER($1) AND t.name=$2 AND c.group=$3 AND c.version=$4 AND c.kind=$5;", fullRepo, tag, group, version, kind)
 	}
 	foundTag := tag
 	if err := c.Scan(&foundTag, crd); err != nil {
