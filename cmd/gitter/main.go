@@ -160,7 +160,7 @@ func (g *Gitter) Index(gRepo models.GitterRepo, reply *string) error {
 				return err
 			}
 		}
-		repoCRDs, err := getCRDsFromTag(gRepo.Org+"/"+gRepo.Repo, dir, t.name, h, w)
+		repoCRDs, err := getCRDsFromTag(dir, t.name, h, w)
 		if err != nil {
 			log.Printf("Unable to get CRDs: %s@%s (%v)", repo, t.name, err)
 			continue
@@ -181,7 +181,7 @@ func (g *Gitter) Index(gRepo models.GitterRepo, reply *string) error {
 	return nil
 }
 
-func getCRDsFromTag(repo string, dir string, tag string, hash *plumbing.Hash, w *git.Worktree) (map[string]models.RepoCRD, error) {
+func getCRDsFromTag(dir string, tag string, hash *plumbing.Hash, w *git.Worktree) (map[string]models.RepoCRD, error) {
 	err := w.Checkout(&git.CheckoutOptions{
 		Hash:  *hash,
 		Force: true,
