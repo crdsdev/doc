@@ -239,19 +239,19 @@ func splitYAML(greps []git.GrepResult, dir string) map[string][][]byte {
 		decoder := yaml.NewDecoder(bytes.NewReader(b))
 		var yamls [][]byte
 		for {
-			var node yaml.Node
+			var node map[string]interface{}
 			err := decoder.Decode(&node)
 			if err == io.EOF {
 				break
 			}
 			if err != nil {
-				log.Printf("failed to decode part of CRD file: %s", res.FileName)
+				log.Printf("failed to decode part of CRD file: %s\n%w", res.FileName, err)
 				continue
 			}
 
 			doc, err := yaml.Marshal(node)
 			if err != nil {
-				log.Printf("failed to decode part of CRD file: %s", res.FileName)
+				log.Printf("failed to encode part of CRD file: %s\n%w", res.FileName, err)
 				continue
 			}
 			yamls = append(yamls, doc)
