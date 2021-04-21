@@ -197,13 +197,13 @@ func getCRDsFromTag(dir string, tag string, hash *plumbing.Hash, w *git.Worktree
 		return nil, err
 	}
 	reg := regexp.MustCompile("kind: CustomResourceDefinition")
-	regPath := regexp.MustCompile("^.*\\.yaml")
+	regPath := regexp.MustCompile(`^.*\.yaml`)
 	g, _ := w.Grep(&git.GrepOptions{
 		Patterns:  []*regexp.Regexp{reg},
 		PathSpecs: []*regexp.Regexp{regPath},
 	})
 	repoCRDs := map[string]models.RepoCRD{}
-	files := splitYAML(g, dir)
+	files := getYAMLs(g, dir)
 	for file, yamls := range files {
 		for _, y := range yamls {
 			crder, err := crd.NewCRDer(y, crd.StripLabels(), crd.StripAnnotations(), crd.StripConversion())
@@ -227,14 +227,8 @@ func getCRDsFromTag(dir string, tag string, hash *plumbing.Hash, w *git.Worktree
 	return repoCRDs, nil
 }
 
-func splitYAML(greps []git.GrepResult, dir string) map[string][][]byte {
+func getYAMLs(greps []git.GrepResult, dir string) map[string][][]byte {
 	allCRDs := map[string][][]byte{}
-	defer func() {
-		if err := recover(); err != nil {
-			log.Printf("failed to process yaml file: %s", err)
-			allCRDs = map[string][][]byte{}
-		}
-	}()
 	for _, res := range greps {
 		b, err := ioutil.ReadFile(dir + "/" + res.FileName)
 		if err != nil {
@@ -242,29 +236,47 @@ func splitYAML(greps []git.GrepResult, dir string) map[string][][]byte {
 			continue
 		}
 
-		decoder := yaml.NewDecoder(bytes.NewReader(b))
-		var yamls [][]byte
-		for {
-			var node map[string]interface{}
-			err := decoder.Decode(&node)
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				log.Printf("failed to decode part of CRD file: %s\n%s", res.FileName, err)
-				continue
-			}
-
-			doc, err := yaml.Marshal(node)
-			if err != nil {
-				log.Printf("failed to encode part of CRD file: %s\n%s", res.FileName, err)
-				continue
-			}
-			yamls = append(yamls, doc)
+		yamls, err := splitYAML(b, res.FileName)
+		if err != nil {
+			log.Printf("failed to split/parse CRD file: %s", res.FileName)
+			continue
 		}
+
 		allCRDs[res.FileName] = yamls
 	}
 	return allCRDs
+}
+
+func splitYAML(file []byte, filename string) ([][]byte, error) {
+	var yamls [][]byte
+	var err error = nil
+	defer func() {
+		if err := recover(); err != nil {
+			yamls = make([][]byte, 0)
+			err = fmt.Errorf("panic while processing yaml file: %w", err)
+		}
+	}()
+
+	decoder := yaml.NewDecoder(bytes.NewReader(file))
+	for {
+		var node map[string]interface{}
+		err := decoder.Decode(&node)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Printf("failed to decode part of CRD file: %s\n%s", filename, err)
+			continue
+		}
+
+		doc, err := yaml.Marshal(node)
+		if err != nil {
+			log.Printf("failed to encode part of CRD file: %s\n%s", filename, err)
+			continue
+		}
+		yamls = append(yamls, doc)
+	}
+	return yamls, err
 }
 
 func buildInsert(query string, argsPerInsert, numInsert int) string {
