@@ -229,6 +229,12 @@ func getCRDsFromTag(dir string, tag string, hash *plumbing.Hash, w *git.Worktree
 
 func splitYAML(greps []git.GrepResult, dir string) map[string][][]byte {
 	allCRDs := map[string][][]byte{}
+	defer func() {
+		if err := recover(); err != nil {
+			log.Printf("failed to process yaml file: %s", err)
+			allCRDs = map[string][][]byte{}
+		}
+	}()
 	for _, res := range greps {
 		b, err := ioutil.ReadFile(dir + "/" + res.FileName)
 		if err != nil {
@@ -245,13 +251,13 @@ func splitYAML(greps []git.GrepResult, dir string) map[string][][]byte {
 				break
 			}
 			if err != nil {
-				log.Printf("failed to decode part of CRD file: %s\n%w", res.FileName, err)
+				log.Printf("failed to decode part of CRD file: %s\n%s", res.FileName, err)
 				continue
 			}
 
 			doc, err := yaml.Marshal(node)
 			if err != nil {
-				log.Printf("failed to encode part of CRD file: %s\n%w", res.FileName, err)
+				log.Printf("failed to encode part of CRD file: %s\n%s", res.FileName, err)
 				continue
 			}
 			yamls = append(yamls, doc)
