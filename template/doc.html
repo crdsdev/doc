@@ -77,15 +77,14 @@
                 <button class="btn" type="button" onClick=${collapseAll}>- collapse all</button>
             </div>
             <div class="collapse-group">
-                ${
-                    properties != null 
-                    ? Object.keys(properties).map(prop => SchemaPart({ key: prop, property: properties[prop] }))
-                    : html`
+                ${properties != null
+                ? Object.keys(properties).map(prop => SchemaPart({ key: prop, property: properties[prop] }))
+                : html`
                     <p class="font-size-18">
                         This CRD has an empty or unspecified schema.
                     </p>
                     `
-                }
+            }
             </div>
         `;
     }
@@ -181,7 +180,7 @@
 <script defer src="https://unpkg.com/prismjs@1/plugins/autoloader/prism-autoloader.min.js"></script>
 <style>
     /* Remove extra whitespace introduced by markdown translation */
-    .property-description > p {
+    .property-description>p {
         margin: 0;
     }
 </style>
