@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -39,6 +40,7 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/pkg/errors"
 	"gopkg.in/square/go-jose.v2/json"
+	yaml "gopkg.in/yaml.v3"
 )
 
 const (
@@ -233,9 +235,28 @@ func splitYAML(greps []git.GrepResult, dir string) map[string][][]byte {
 			log.Printf("failed to read CRD file: %s", res.FileName)
 			continue
 		}
-		// TODO(hasheddan): generalize this replacement
-		b = bytes.ReplaceAll(b, []byte("rw-rw----"), []byte("660"))
-		allCRDs[res.FileName] = bytes.Split(b, []byte("---"))
+
+		decoder := yaml.NewDecoder(bytes.NewReader(b))
+		var yamls [][]byte
+		for {
+			var node yaml.Node
+			err := decoder.Decode(&node)
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				log.Printf("failed to decode part of CRD file: %s", res.FileName)
+				continue
+			}
+
+			doc, err := yaml.Marshal(node)
+			if err != nil {
+				log.Printf("failed to decode part of CRD file: %s", res.FileName)
+				continue
+			}
+			yamls = append(yamls, doc)
+		}
+		allCRDs[res.FileName] = yamls
 	}
 	return allCRDs
 }
