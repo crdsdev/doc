@@ -16,9 +16,22 @@ type Resolver struct {
 }
 
 func New(db *pgxpool.Pool) graphql.Config {
-	return graphql.Config{
+	c := graphql.Config{
 		Resolvers: &Resolver{
 			db: db,
 		},
 	}
+
+	c.Complexity.Query.Repositories = func(childComplexity int, skip *int, take *int) int {
+		takeActual := 10
+		if take != nil {
+			takeActual = *take
+		}
+		return childComplexity * takeActual
+	}
+	c.Complexity.Crd.Spec = func(childComplexity int) int {
+		return childComplexity + 1
+	}
+
+	return c
 }

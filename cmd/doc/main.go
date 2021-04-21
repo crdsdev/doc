@@ -33,6 +33,7 @@ import (
 	crdutil "github.com/crdsdev/doc/pkg/crd"
 
 	gqlhandler "github.com/99designs/gqlgen/graphql/handler"
+	"github.com/99designs/gqlgen/graphql/handler/extension"
 	"github.com/crdsdev/doc/pkg/models"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
@@ -196,6 +197,8 @@ func start() {
 	r := mux.NewRouter().StrictSlash(true)
 	staticHandler := http.StripPrefix("/static/", http.FileServer(http.Dir("./static/")))
 	graphHandler := gqlhandler.NewDefaultServer(graphql.NewExecutableSchema(graphapi.New(db)))
+	graphHandler.Use(extension.FixedComplexityLimit(100))
+
 	r.HandleFunc("/", home)
 	r.PathPrefix("/static/").Handler(staticHandler)
 	r.PathPrefix("/graphql/").Handler(graphHandler)

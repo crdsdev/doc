@@ -29,7 +29,8 @@ type Repository {
 }
 
 type Query {
-    repositories(skip: Int = 0, take: Int = 100): [Repository]!
+    # This is a pretty niave paging strategy
+    repositories(skip: Int = 0, take: Int = 10): [Repository]!
     tags(repo: String!): [Tag!]
     tag(repo: String!, name: String!): Tag
 }

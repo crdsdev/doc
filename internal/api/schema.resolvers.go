@@ -33,7 +33,15 @@ func (r *crdResolver) Tag(ctx context.Context, obj *models.Crd) (*models.Tag, er
 }
 
 func (r *queryResolver) Repositories(ctx context.Context, skip *int, take *int) ([]*models.Repository, error) {
-	rows, err := r.db.Query(ctx, "SELECT DISTINCT repo FROM tags OFFSET $1 LIMIT $2", skip, take)
+	skipActual := 0
+	if skip != nil {
+		skipActual = *skip
+	}
+	takeActual := 10
+	if take != nil {
+		takeActual = *take
+	}
+	rows, err := r.db.Query(ctx, "SELECT DISTINCT repo FROM tags OFFSET $1 LIMIT $2", skipActual, takeActual)
 	if err != nil {
 		return nil, err
 	}
