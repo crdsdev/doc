@@ -45,9 +45,9 @@
     const { Kind, Group, Version, Schema } = JSON.parse(document.getElementById('pageData').textContent);
 
     const properties = Schema.Properties;
-    if (properties.apiVersion) delete properties.apiVersion;
-    if (properties.kind) delete properties.kind;
-    if (properties.metadata && properties.metadata.Type == "object") delete properties.metadata;
+    if (properties?.apiVersion) delete properties.apiVersion;
+    if (properties?.kind) delete properties.kind;
+    if (properties?.metadata?.Type == "object") delete properties.metadata;
 
     function getDescription(schema) {
         let desc = schema.Description || '';
@@ -72,12 +72,19 @@
 
             <p class="font-size-18">${React.createElement('div', { dangerouslySetInnerHTML: { __html: getDescription(Schema) } })}</p>
 
-            <div class="d-flex flex-row-reverse mb-10 mt-10">
+            <div class="${properties == null ? 'd-none' : 'd-flex'} flex-row-reverse mb-10 mt-10">
                 <button class="btn ml-10" type="button" onClick=${expandAll}>+ expand all</button>
                 <button class="btn" type="button" onClick=${collapseAll}>- collapse all</button>
             </div>
             <div class="collapse-group">
-            ${Object.keys(properties).map(prop => SchemaPart({ key: prop, property: properties[prop] }))}
+                ${properties != null
+                ? Object.keys(properties).map(prop => SchemaPart({ key: prop, property: properties[prop] }))
+                : html`
+                    <p class="font-size-18">
+                        This CRD has an empty or unspecified schema.
+                    </p>
+                    `
+            }
             </div>
         `;
     }
@@ -173,7 +180,7 @@
 <script defer src="https://unpkg.com/prismjs@1/plugins/autoloader/prism-autoloader.min.js"></script>
 <style>
     /* Remove extra whitespace introduced by markdown translation */
-    .property-description > p {
+    .property-description>p {
         margin: 0;
     }
 </style>
