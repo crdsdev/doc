@@ -1,0 +1,40 @@
+directive @goField(forceResolver: Boolean, name: String) on INPUT_FIELD_DEFINITION
+    | FIELD_DEFINITION
+
+scalar Spec
+
+type Crd {
+    kind: String!
+    group: String!
+    version: String!
+    filename: String!
+    spec: Spec!
+
+    tagId: ID!
+    tag: Tag! @goField(forceResolver: true)
+}
+
+type Tag {
+    id: ID!
+    name: String!
+    time: String!
+    repo: Repository! @goField(forceResolver: true)
+
+    crds: [Crd!]! @goField(forceResolver: true)
+}
+
+type Repository {
+    name: String!
+    tags: [Tag!]! @goField(forceResolver: true)
+}
+
+type Query {
+    # This is a pretty niave paging strategy
+    repositories(skip: Int = 0, take: Int = 10): [Repository]!
+    tags(repo: String!): [Tag!]
+    tag(repo: String!, name: String!): Tag
+}
+
+schema {
+    query: Query
+}

@@ -7,4 +7,8 @@ build-doc:
 build-gitter:
 	docker build . -f deploy/gitter.Dockerfile -t crdsdev/doc-gitter:latest
 
+.PHONY: generate
+generate:
+	go generate ./...
+
 .PHONY: build-doc build-gitter

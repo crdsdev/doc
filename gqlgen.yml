@@ -1,0 +1,24 @@
+schema:
+- api/schema.graphql
+
+exec:
+  filename: internal/api/graphql/generated.go
+  package: generated
+
+model:
+  filename: internal/api/models/models_gen.go
+  package: models
+
+resolver:
+  layout: follow-schema
+  dir: internal/api
+  package: api
+  filename_template: "{name}.resolvers.go"
+
+models:
+  ID:
+    model:
+      - github.com/99designs/gqlgen/graphql.Int64
+  Spec:
+    model:
+      - github.com/99designs/gqlgen/graphql.Map

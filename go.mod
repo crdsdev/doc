@@ -3,6 +3,7 @@ module github.com/crdsdev/doc
 go 1.13
 
 require (
+	github.com/99designs/gqlgen v0.13.0
 	github.com/go-git/go-git/v5 v5.0.0
 	github.com/go-openapi/spec v0.19.5 // indirect
 	github.com/golang/protobuf v1.4.3 // indirect
@@ -11,12 +12,14 @@ require (
 	github.com/gorilla/mux v1.7.4
 	github.com/hashicorp/golang-lru v0.5.3 // indirect
 	github.com/imdario/mergo v0.3.7 // indirect
+	github.com/jackc/pgtype v1.6.2
 	github.com/jackc/pgx/v4 v4.10.1
 	github.com/lib/pq v1.9.0 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5
 	github.com/unrolled/render v1.0.3
+	github.com/vektah/gqlparser/v2 v2.1.0
 	golang.org/x/net v0.0.0-20201202161906-c7110b5ffcbb // indirect
 	golang.org/x/oauth2 v0.0.0-20201109201403-9fd604954f58 // indirect
 	golang.org/x/text v0.3.4 // indirect
