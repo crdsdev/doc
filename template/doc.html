@@ -100,7 +100,6 @@
                 if (itemsSchema.Type !== 'object') {
                     type = `[]${itemsSchema.Type}`;
                 } else {
-                    console.log({ property, itemsSchema });
                     schema = itemsSchema;
                     props = itemsSchema.Properties || {};
                     type = `[]object`;
