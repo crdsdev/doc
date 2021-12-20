@@ -102,7 +102,7 @@
                 } else {
                     console.log({ property, itemsSchema });
                     schema = itemsSchema;
-                    props = itemsSchema.Properties;
+                    props = itemsSchema.Properties || {};
                     type = `[]object`;
                 }
             }
