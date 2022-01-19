@@ -81,13 +81,13 @@ Then we start the doc server properly
 docker run -d --rm \
    -p 5000:5000 \
    --link dev-postgres:pg \
-   --link doc-gitter:gitter \
+   --link doc-gitter:gt \
    -e PG_USER=postgres \
    -e PG_PASS=password \
    -e PG_HOST=pg \
    -e PG_PORT=5432 \
    -e PG_DB=doc \
-   -e GITTER_HOST=gitter \
+   -e GITTER_HOST=gt \
    crdsdev/doc:latest
 ```
 And you should be able to browse the server by hitting `http://localhost:5000`.
