@@ -54,6 +54,11 @@ var (
 	portEnv     = "PG_PORT"
 	dbEnv       = "PG_DB"
 
+	gitterHostEnv     = "GITTER_HOST"
+	gitterPortEnv     = "GITTER_PORT"
+	gitterHostDefault = "127.0.0.1"
+	gitterPortDefault = "1234"
+
 	cookieDarkMode = "halfmoon_preferredMode"
 
 	address   string
@@ -125,7 +130,15 @@ type homeData struct {
 
 func worker(gitterChan <-chan models.GitterRepo) {
 	for job := range gitterChan {
-		client, err := rpc.DialHTTP("tcp", "127.0.0.1:1234")
+		var gitterHost, gitterPort string
+		var envVarExists bool
+		if gitterHost, envVarExists = os.LookupEnv(gitterHostEnv); !envVarExists {
+			gitterHost = gitterHostDefault
+		}
+		if gitterPort, envVarExists = os.LookupEnv(gitterPortEnv); !envVarExists {
+			gitterPort = gitterPortDefault
+		}
+		client, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%s", gitterHost, gitterPort))
 		if err != nil {
 			log.Fatal("dialing:", err)
 		}
