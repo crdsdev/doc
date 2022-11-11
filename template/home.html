@@ -7,9 +7,10 @@
         <div class="content hero">
             <h1 class="text-center site-title">doc.crds.dev</h1>
             <div id="repo_go"></div>
-            <p class="text-center">doc.crds.dev is and always will be <a href="https://github.com/crdsdev/doc">free and open source</a>.</p>
+            <p class="text-center">doc.crds.dev is and always will be <a href="https://github.com/crdsdev/doc">free and open
+                    source</a>.</p>
         </div>
-        <p>To find a repo, search <kbd>github.com/{org}/{repo}</kbd>. You may optionally append <kbd>@{version}</kbd> to view documentation for a specific version of the project. For example: <a href="/github.com/crossplane/crossplane@v0.10.0">github.com/crossplane/crossplane@v0.10.0</a>. If you do not include a tag, the latest indexed tag will be served.</p>
+        <p>To find a repo, search <kbd>{{ .Base }}/{org}/{repo}</kbd>. You may optionally append <kbd>@{version}</kbd> to view documentation for a specific version of the project. For example: <a href="/{{ .Base }}/{{ .ExampleProject }}">{{ .Base }}/{{ .ExampleProject }}</a>. If you do not include a tag, the latest indexed tag will be served.</p>
     </div>
 </div>
 
@@ -49,7 +50,7 @@
             <div class="input-group-prepend">
                 <span class="input-group-text"><kbd class="ml-5">/</kbd></span>
             </div>
-            <input ref=${input} type="text" class="form-control" placeholder="github.com/crossplane/provider-gcp" onInput=${e => setUrl(e.target.value)} value=${url} />
+            <input ref=${input} type="text" class="form-control" placeholder="{{ .Base }}/{{ .ExampleProject }}" onInput=${e => setUrl(e.target.value)} value=${url} />
             <div class="input-group-append">
                 <button class="btn btn-primary" type="search">Go</span>
             </div>

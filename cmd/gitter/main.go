@@ -32,6 +32,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/crdsdev/doc/pkg/config"
 	"github.com/crdsdev/doc/pkg/crd"
 	"github.com/crdsdev/doc/pkg/models"
 	"github.com/go-git/go-git/v5"
@@ -53,7 +54,26 @@ const (
 	dbEnv       = "PG_DB"
 )
 
+var repoBase = "github.com"
+var token = ""
+
+type DocGitter struct {
+	config *config.DocConfig
+}
+
+var (
+	configPath = "doc-config.yaml"
+	docGitter  = DocGitter{}
+)
+
 func main() {
+	if path := os.Getenv("CONFIG_FILE"); path != "" {
+		configPath = path
+	}
+	config, err := config.LoadConfigWithDefaults(configPath)
+	docGitter.config = config
+	token = os.Getenv("TOKEN")
+	repoBase = os.Getenv("REPO")
 	dsn := fmt.Sprintf("postgresql://%s:%s@%s:%s/%s", os.Getenv(userEnv), os.Getenv(passwordEnv), os.Getenv(hostEnv), os.Getenv(portEnv), os.Getenv(dbEnv))
 	conn, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
@@ -96,9 +116,13 @@ func (g *Gitter) Index(gRepo models.GitterRepo, reply *string) error {
 		return err
 	}
 	defer os.RemoveAll(dir)
-	fullRepo := fmt.Sprintf("%s/%s/%s", "github.com", strings.ToLower(gRepo.Org), strings.ToLower(gRepo.Repo))
+	fullRepo := fmt.Sprintf("%s/%s/%s", repoBase, strings.ToLower(gRepo.Org), strings.ToLower(gRepo.Repo))
+	repoURL := fmt.Sprintf("https://%s", fullRepo)
+	if token != "" {
+		repoURL = fmt.Sprintf("https://oauth2:%s@%s", token, fullRepo)
+	}
 	cloneOpts := &git.CloneOptions{
-		URL:               fmt.Sprintf("https://%s", fullRepo),
+		URL:               repoURL,
 		Depth:             1,
 		Progress:          os.Stdout,
 		RecurseSubmodules: git.NoRecurseSubmodules,
@@ -204,7 +228,19 @@ func getCRDsFromTag(dir string, tag string, hash *plumbing.Hash, w *git.Worktree
 	})
 	repoCRDs := map[string]models.RepoCRD{}
 	files := getYAMLs(g, dir)
+	matchAgainstRegex := false
+
+	var fileReg *regexp.Regexp
+	if docGitter.config != nil && docGitter.config.Scan != nil && docGitter.config.Scan.Ignore != nil && docGitter.config.Scan.Ignore.Regex != nil {
+		matchAgainstRegex = true
+		fileReg = regexp.MustCompile(*docGitter.config.Scan.Ignore.Regex)
+	}
 	for file, yamls := range files {
+		if matchAgainstRegex {
+			if fileReg.MatchString(file) {
+				continue
+			}
+		}
 		for _, y := range yamls {
 			crder, err := crd.NewCRDer(y, crd.StripLabels(), crd.StripAnnotations(), crd.StripConversion())
 			if err != nil || crder.CRD == nil {

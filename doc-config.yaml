@@ -1,0 +1,6 @@
+scan:
+  regex: ^.*.\.yaml
+  ignore:
+    regex: .*composite.*
+
+exampleProject: crossplane/crossplane@v0.10.0

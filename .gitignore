@@ -1,3 +1,4 @@
 deploy/dns
 *.rdb
 cloudsql.json
+.vscode

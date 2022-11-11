@@ -28,6 +28,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/crdsdev/doc/pkg/config"
 	crdutil "github.com/crdsdev/doc/pkg/crd"
 	"github.com/crdsdev/doc/pkg/models"
 	"github.com/google/uuid"
@@ -60,6 +61,10 @@ var (
 	analytics bool = false
 
 	gitterChan chan models.GitterRepo
+
+	repoBase   = "github.com"
+	configPath = "doc-config.yaml"
+	docServer  = DocServer{}
 )
 
 // SchemaPlusParent is a JSON schema plus the name of the parent field.
@@ -68,22 +73,7 @@ type SchemaPlusParent struct {
 	Schema map[string]apiextensions.JSONSchemaProps
 }
 
-var page = render.New(render.Options{
-	Extensions:    []string{".html"},
-	Directory:     "template",
-	Layout:        "layout",
-	IsDevelopment: os.Getenv(envDevelopment) == "true",
-	Funcs: []template.FuncMap{
-		{
-			"plusParent": func(p string, s map[string]apiextensions.JSONSchemaProps) *SchemaPlusParent {
-				return &SchemaPlusParent{
-					Parent: p,
-					Schema: s,
-				}
-			},
-		},
-	},
-})
+var page *render.Render
 
 type pageData struct {
 	Analytics     bool
@@ -98,7 +88,7 @@ type baseData struct {
 
 type docData struct {
 	Page        pageData
-	Repo        string
+	Repo        repoData
 	Tag         string
 	At          string
 	Group       string
@@ -110,7 +100,7 @@ type docData struct {
 
 type orgData struct {
 	Page  pageData
-	Repo  string
+	Repo  repoData
 	Tag   string
 	At    string
 	Tags  []string
@@ -119,8 +109,15 @@ type orgData struct {
 }
 
 type homeData struct {
-	Page  pageData
-	Repos []string
+	Page           pageData
+	Base           string
+	ExampleProject string
+	Repos          []string
+}
+
+type repoData struct {
+	Name string
+	Base string
 }
 
 func worker(gitterChan <-chan models.GitterRepo) {
@@ -155,7 +152,44 @@ func init() {
 	gitterChan = make(chan models.GitterRepo, 4)
 }
 
+type DocServer struct {
+	config *config.DocConfig
+}
+
 func main() {
+	if repo := os.Getenv("REPO"); repo != "" {
+		repoBase = repo
+	}
+	if path := os.Getenv("CONFIG_FILE"); path != "" {
+		configPath = path
+	}
+
+	config, err := config.LoadConfigWithDefaults(configPath)
+
+	if err != nil {
+		panic(err)
+	}
+
+	docServer.config = config
+
+	page = render.New(render.Options{
+		Extensions: []string{".html"},
+		Directory:  *docServer.config.TemplateFolder,
+
+		Layout:        "layout",
+		IsDevelopment: os.Getenv(envDevelopment) == "true",
+		Funcs: []template.FuncMap{
+			{
+				"plusParent": func(p string, s map[string]apiextensions.JSONSchemaProps) *SchemaPlusParent {
+					return &SchemaPlusParent{
+						Parent: p,
+						Schema: s,
+					}
+				},
+			},
+		},
+	})
+	repoBase = os.Getenv("REPO")
 	flag.Parse()
 	dsn := fmt.Sprintf("postgresql://%s:%s@%s:%s/%s", os.Getenv(userEnv), os.Getenv(passwordEnv), os.Getenv(hostEnv), os.Getenv(portEnv), os.Getenv(dbEnv))
 	conn, err := pgxpool.ParseConfig(dsn)
@@ -193,16 +227,16 @@ func start() {
 	staticHandler := http.StripPrefix("/static/", http.FileServer(http.Dir("./static/")))
 	r.HandleFunc("/", home)
 	r.PathPrefix("/static/").Handler(staticHandler)
-	r.HandleFunc("/github.com/{org}/{repo}@{tag}", org)
-	r.HandleFunc("/github.com/{org}/{repo}", org)
-	r.HandleFunc("/raw/github.com/{org}/{repo}@{tag}", raw)
-	r.HandleFunc("/raw/github.com/{org}/{repo}", raw)
+	r.HandleFunc(fmt.Sprintf("/%s/{org}/{repo}@{tag}", repoBase), org)
+	r.HandleFunc(fmt.Sprintf("/%s/{org}/{repo}", repoBase), org)
+	r.HandleFunc(fmt.Sprintf("/raw/%s/{org}/{repo}@{tag}", repoBase), raw)
+	r.HandleFunc(fmt.Sprintf("/raw/%s/{org}/{repo}", repoBase), raw)
 	r.PathPrefix("/").HandlerFunc(doc)
-	log.Fatal(http.ListenAndServe(":5000", r))
+	log.Fatal(http.ListenAndServe(":5050", r))
 }
 
 func home(w http.ResponseWriter, r *http.Request) {
-	data := homeData{Page: getPageData(r, "Doc", true)}
+	data := homeData{Page: getPageData(r, "Doc", true), Base: repoBase, ExampleProject: *docServer.config.ExampleProject}
 	if err := page.HTML(w, http.StatusOK, "home", data); err != nil {
 		log.Printf("homeTemplate.Execute(): %v", err)
 		fmt.Fprint(w, "Unable to render home template.")
@@ -217,7 +251,7 @@ func raw(w http.ResponseWriter, r *http.Request) {
 	repo := parameters["repo"]
 	tag := parameters["tag"]
 
-	fullRepo := fmt.Sprintf("%s/%s/%s", "github.com", org, repo)
+	fullRepo := fmt.Sprintf("%s/%s/%s", repoBase, org, repo)
 	var rows pgx.Rows
 	var err error
 	if tag == "" {
@@ -289,7 +323,7 @@ func org(w http.ResponseWriter, r *http.Request) {
 	repo := parameters["repo"]
 	tag := parameters["tag"]
 	pageData := getPageData(r, fmt.Sprintf("%s/%s", org, repo), false)
-	fullRepo := fmt.Sprintf("%s/%s/%s", "github.com", org, repo)
+	fullRepo := fmt.Sprintf("%s/%s/%s", repoBase, org, repo)
 	b := &pgx.Batch{}
 	if tag == "" {
 		b.Queue("SELECT t.name, c.group, c.version, c.kind FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE LOWER(t.repo)=LOWER($1) AND t.id = (SELECT id FROM tags WHERE LOWER(repo) = LOWER($1) ORDER BY time DESC LIMIT 1);", fullRepo)
@@ -327,7 +361,9 @@ func org(w http.ResponseWriter, r *http.Request) {
 	c, err = br.Query()
 	if err != nil {
 		log.Printf("failed to get tags for %s : %v", repo, err)
-		if err := page.HTML(w, http.StatusOK, "new", baseData{Page: pageData}); err != nil {
+		data := homeData{Page: getPageData(r, "Doc", true), Base: repoBase, ExampleProject: *docServer.config.ExampleProject}
+		if err := page.HTML(w, http.StatusOK, "home", data); err != nil {
+			// if err := page.HTML(w, http.StatusOK, "new", baseData{Page: pageData}); err != nil {
 			log.Printf("newTemplate.Execute(): %v", err)
 			fmt.Fprint(w, "Unable to render new template.")
 		}
@@ -362,8 +398,11 @@ func org(w http.ResponseWriter, r *http.Request) {
 		foundTag = tags[0]
 	}
 	if err := page.HTML(w, http.StatusOK, "org", orgData{
-		Page:  pageData,
-		Repo:  strings.Join([]string{org, repo}, "/"),
+		Page: pageData,
+		Repo: repoData{
+			Name: strings.Join([]string{org, repo}, "/"),
+			Base: repoBase,
+		},
 		Tag:   foundTag,
 		Tags:  tags,
 		CRDs:  repoCRDs,
@@ -387,7 +426,7 @@ func doc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pageData := getPageData(r, fmt.Sprintf("%s.%s/%s", kind, group, version), false)
-	fullRepo := fmt.Sprintf("%s/%s/%s", "github.com", org, repo)
+	fullRepo := fmt.Sprintf("%s/%s/%s", repoBase, org, repo)
 	var c pgx.Row
 	if tag == "" {
 		c = db.QueryRow(context.Background(), "SELECT t.name, c.data::jsonb FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE LOWER(t.repo)=LOWER($1) AND t.id = (SELECT id FROM tags WHERE repo = $1 ORDER BY time DESC LIMIT 1) AND c.group=$2 AND c.version=$3 AND c.kind=$4;", fullRepo, group, version, kind)
@@ -428,8 +467,11 @@ func doc(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := page.HTML(w, http.StatusOK, "doc", docData{
-		Page:        pageData,
-		Repo:        strings.Join([]string{org, repo}, "/"),
+		Page: pageData,
+		Repo: repoData{
+			Name: strings.Join([]string{org, repo}, "/"),
+			Base: repoBase,
+		},
 		Tag:         foundTag,
 		Group:       gvk.Group,
 		Version:     gvk.Version,
