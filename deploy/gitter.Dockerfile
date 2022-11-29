@@ -3,14 +3,18 @@
 # https://hub.docker.com/_/golang
 FROM golang:1.13 as builder
 
-WORKDIR app/
+WORKDIR /go/app/
+
+# Copy and cache dependencies
+COPY ../go.mod .
+COPY ../go.sum .
+
+# Retrieve application dependencies.
+# This allows the container build to reuse cached dependencies as long as go.mod and go.sum are unchanged.
+RUN go mod download
 
 # Copy internal libraries.
 COPY . .
-
-# Retrieve application dependencies.
-# This allows the container build to reuse cached dependencies.
-RUN go mod download
 
 # Build the binary.
 RUN CGO_ENABLED=0 GOOS=linux go build -o gitter -mod=readonly -v ./cmd/gitter/main.go
@@ -22,7 +26,7 @@ FROM alpine:3
 RUN apk add --no-cache ca-certificates
 
 # Copy the binary to the production image from the builder stage.
-COPY --from=builder go/app/gitter ./
+COPY --from=builder /go/app/gitter ./
 
 # Run the web service on container startup.
 ENTRYPOINT ["/gitter"]
