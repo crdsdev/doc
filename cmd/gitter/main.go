@@ -20,6 +20,16 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/crdsdev/doc/pkg/crd"
+	"github.com/crdsdev/doc/pkg/models"
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	gogithttp "github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/pkg/errors"
+	"gopkg.in/square/go-jose.v2/json"
+	"gopkg.in/yaml.v3"
 	"io"
 	"io/ioutil"
 	"log"
@@ -31,16 +41,6 @@ import (
 	"regexp"
 	"strings"
 	"time"
-
-	"github.com/crdsdev/doc/pkg/crd"
-	"github.com/crdsdev/doc/pkg/models"
-	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
-	"github.com/pkg/errors"
-	"gopkg.in/square/go-jose.v2/json"
-	yaml "gopkg.in/yaml.v3"
 )
 
 const (
@@ -53,8 +53,51 @@ const (
 	dbEnv       = "PG_DB"
 )
 
+type Config struct {
+	Repos []RepoConfig `yaml:"repos"`
+}
+
+func (c *Config) getAuthenticationUser(gRepo models.GitterRepo) *RepoUser {
+	for _, element := range c.Repos {
+		if element.Server == gRepo.Server && element.Name == gRepo.Org+"/"+gRepo.Repo {
+			return &element.User
+		}
+	}
+	return &RepoUser{Name: "", PwdFromEnv: ""}
+}
+
+type RepoConfig struct {
+	Name   string   `yaml:"name"`
+	Server string   `yaml:"server"`
+	User   RepoUser `yaml:"user"`
+}
+
+type RepoUser struct {
+	Name       string `yaml:"name"`
+	PwdFromEnv string `yaml:"pwdFromEnv"`
+}
+
+func readConf(filename string) (*Config, error) {
+	buf, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	c := &Config{}
+	err = yaml.Unmarshal(buf, c)
+	if err != nil {
+		return nil, fmt.Errorf("in file %q: %w", filename, err)
+	}
+
+	return c, err
+}
+
 func main() {
 	dsn := fmt.Sprintf("postgresql://%s:%s@%s:%s/%s", os.Getenv(userEnv), os.Getenv(passwordEnv), os.Getenv(hostEnv), os.Getenv(portEnv), os.Getenv(dbEnv))
+	conf, err := readConf("/usr/repos.yaml")
+	if err != nil {
+		fmt.Println(err)
+	}
 	conn, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		panic(err)
@@ -65,6 +108,7 @@ func main() {
 	}
 	gitter := &Gitter{
 		conn: pool,
+		conf: conf,
 	}
 	rpc.Register(gitter)
 	rpc.HandleHTTP()
@@ -79,6 +123,7 @@ func main() {
 // Gitter indexes git repos.
 type Gitter struct {
 	conn *pgxpool.Pool
+	conf *Config
 }
 
 type tag struct {
@@ -89,19 +134,29 @@ type tag struct {
 
 // Index indexes a git repo at the specified url.
 func (g *Gitter) Index(gRepo models.GitterRepo, reply *string) error {
-	log.Printf("Indexing repo %s/%s...\n", gRepo.Org, gRepo.Repo)
-
 	dir, err := ioutil.TempDir(os.TempDir(), "doc-gitter")
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(dir)
-	fullRepo := fmt.Sprintf("%s/%s/%s", "github.com", strings.ToLower(gRepo.Org), strings.ToLower(gRepo.Repo))
+
+	authUser := g.conf.getAuthenticationUser(gRepo)
+
+	var fullRepo string
+
+	fullRepo = fmt.Sprintf("%s/%s/%s", strings.ToLower(gRepo.Server), strings.ToLower(gRepo.Org), strings.ToLower(gRepo.Repo))
+
+	log.Printf("Indexing repo %s...\n", fullRepo)
+
 	cloneOpts := &git.CloneOptions{
 		URL:               fmt.Sprintf("https://%s", fullRepo),
 		Depth:             1,
 		Progress:          os.Stdout,
 		RecurseSubmodules: git.NoRecurseSubmodules,
+		Auth: &gogithttp.BasicAuth{
+			Username: authUser.Name,
+			Password: os.Getenv(authUser.PwdFromEnv),
+		},
 	}
 	if gRepo.Tag != "" {
 		cloneOpts.ReferenceName = plumbing.NewTagReferenceName(gRepo.Tag)
@@ -109,6 +164,7 @@ func (g *Gitter) Index(gRepo models.GitterRepo, reply *string) error {
 	}
 	repo, err := git.PlainClone(dir, false, cloneOpts)
 	if err != nil {
+		fmt.Println(err)
 		return err
 	}
 	iter, err := repo.Tags()

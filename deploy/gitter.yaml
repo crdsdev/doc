@@ -15,6 +15,9 @@ spec:
           containers:
           - name: gitter
             image: crdsdev/doc-gitter:latest
+            volumeMounts:
+              - name: repo-config
+                mountPath: usr
             env:
             - name: REDIS_HOST
               valueFrom:
@@ -26,4 +29,24 @@ spec:
                 configMapKeyRef:
                   name: doc-repos
                   key: repos
+          volumes:
+            - name: repo-config
+              configMap:
+                name: private-repos-auth
+
           restartPolicy: Never
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: private-repos-auth
+  namespace: crdsdev
+data:
+  # Add authentication details for private Github repos and servers as shown in the example entry
+  repos.yaml: |-
+    repos:
+     - name: owner/private-repository
+       server: github.mycompany.com
+       user:
+         name: machineuser
+         pwdFromEnv: MACHINE_SECRET

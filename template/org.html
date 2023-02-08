@@ -1,19 +1,19 @@
 <div class="content-wrapper">
     <div class="container">
         <div class="content">
-            <h1><a href="/github.com/{{ .Repo }}@{{ .Tag }}">{{ .Repo }}@{{ .Tag }}</a></h1>
+            <h1><a href="/{{ .Server }}/{{ .Repo }}@{{ .Tag }}">{{ .Repo }}@{{ .Tag }}</a></h1>
             {{ if .Tag }}
-                <a href="https://github.com/{{ .Repo }}/tree/{{ .Tag }}"><span class="label label-primary">github.com/{{ .Repo }}/tree/{{ .Tag }}</span></a>
+                <a href="https://{{ .Server }}/{{ .Repo }}/tree/{{ .Tag }}"><span class="label label-primary">{{ .Server }}/{{ .Repo }}/tree/{{ .Tag }}</span></a>
             {{ else }}
-                <a href="https://github.com/{{ .Repo }}/tree/master"><span class="label label-primary">github.com/{{ .Repo }}/tree/master</span></a>
+                <a href="https://{{ .Server }}/{{ .Repo }}/tree/master"><span class="label label-primary">{{ .Server }}/{{ .Repo }}/tree/master</span></a>
             {{ end }}
         </div>
         <select class="form-control w-md-400 w-sm-full mb-md-10 mb-5" onchange="handleSelect(this)">
-            {{ $actual := .Tag }}{{ $repo := .Repo }}{{ range $name := .Tags }}
+            {{ $actual := .Tag }}{{ $server := .Server }}{{ $repo := .Repo }}{{ range $name := .Tags }}
                 {{ if eq $name $actual }}
-                <option value="/github.com/{{ $repo }}@{{ $name }}" selected="selected">{{ $name }}</option>
+                <option value="/{{ $server }}/{{ $repo }}@{{ $name }}" selected="selected">{{ $name }}</option>
                 {{ else }}
-                <option value="/github.com/{{ $repo }}@{{ $name }}" >{{ $name }}</option>
+                <option value="/{{ $server }}/{{ $repo }}@{{ $name }}" >{{ $name }}</option>
                 {{ end }}
             {{ end }}
           </select>
@@ -37,14 +37,14 @@
     const { html } = htmReact;
     const { useTable, useSortBy, useGlobalFilter  } = ReactTable;
 
-    const { Repo, CRDs, Tag, At, } = JSON.parse(`{{ . }}`);
+    const { Server, Repo, CRDs, Tag, At, } = JSON.parse(`{{ . }}`);
     const data = Object.keys(CRDs).map(key => CRDs[key]);
 
     const columns = [
         {
             Header: 'Kind',
             accessor: 'Kind',
-            Cell: ({ row: { original }, value }) => html`<a href=${`/github.com/${Repo}/${original.Group}/${original.Kind}/${original.Version}@${Tag}`}>${value}</a>`
+            Cell: ({ row: { original }, value }) => html`<a href=${`/${Server}/${Repo}/${original.Group}/${original.Kind}/${original.Version}@${Tag}`}>${value}</a>`
         },
         {
             Header: 'Group',
