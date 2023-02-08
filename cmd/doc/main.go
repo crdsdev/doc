@@ -30,6 +30,7 @@ import (
 
 	crdutil "github.com/crdsdev/doc/pkg/crd"
 	"github.com/crdsdev/doc/pkg/models"
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
@@ -44,6 +45,7 @@ var db *pgxpool.Pool
 
 // redis connection
 var (
+	envAnalytics   = "ANALYTICS"
 	envDevelopment = "IS_DEV"
 
 	userEnv     = "PG_USER"
@@ -53,6 +55,9 @@ var (
 	dbEnv       = "PG_DB"
 
 	cookieDarkMode = "halfmoon_preferredMode"
+
+	address   string
+	analytics bool = false
 
 	gitterChan chan models.GitterRepo
 )
@@ -81,6 +86,7 @@ var page = render.New(render.Options{
 })
 
 type pageData struct {
+	Analytics     bool
 	DisableNavBar bool
 	IsDarkMode    bool
 	Title         string
@@ -141,6 +147,12 @@ func tryIndex(repo models.GitterRepo, gitterChan chan models.GitterRepo) bool {
 }
 
 func init() {
+	// TODO(hasheddan): use a flag
+	analyticsStr := os.Getenv(envAnalytics)
+	if analyticsStr == "true" {
+		analytics = true
+	}
+
 	gitterChan = make(chan models.GitterRepo, 4)
 }
 
@@ -169,6 +181,7 @@ func getPageData(r *http.Request, title string, disableNavBar bool) pageData {
 		isDarkMode = true
 	}
 	return pageData{
+		Analytics:     analytics,
 		IsDarkMode:    isDarkMode,
 		DisableNavBar: disableNavBar,
 		Title:         title,
@@ -244,6 +257,31 @@ func raw(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.Write([]byte(total))
 		log.Printf("successfully rendered raw CRDs")
+	}
+
+	if analytics {
+		u := uuid.New().String()
+		// TODO(hasheddan): do not hardcode tid and dh
+		metrics := url.Values{
+			"v":   {"1"},
+			"t":   {"pageview"},
+			"tid": {"UA-116820283-2"},
+			"cid": {u},
+			"dh":  {"doc.crds.dev"},
+			"dp":  {r.URL.Path},
+			"uip": {r.RemoteAddr},
+		}
+		client := &http.Client{}
+
+		req, _ := http.NewRequest("POST", "http://www.google-analytics.com/collect", strings.NewReader(metrics.Encode()))
+		req.Header.Add("User-Agent", r.UserAgent())
+		req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+
+		if _, err := client.Do(req); err != nil {
+			log.Printf("failed to report analytics: %s", err.Error())
+		} else {
+			log.Printf("successfully reported analytics")
+		}
 	}
 }
 
