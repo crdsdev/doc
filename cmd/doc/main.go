@@ -26,6 +26,7 @@ import (
 	"net/rpc"
 	"net/url"
 	"os"
+	"sort"
 	"strings"
 
 	crdutil "github.com/crdsdev/doc/pkg/crd"
@@ -36,6 +37,7 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 	flag "github.com/spf13/pflag"
 	"github.com/unrolled/render"
+	"golang.org/x/mod/semver"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"sigs.k8s.io/yaml"
@@ -291,40 +293,10 @@ func org(w http.ResponseWriter, r *http.Request) {
 	pageData := getPageData(r, fmt.Sprintf("%s/%s", org, repo), false)
 	fullRepo := fmt.Sprintf("%s/%s/%s", "github.com", org, repo)
 	b := &pgx.Batch{}
-	if tag == "" {
-		b.Queue("SELECT t.name, c.group, c.version, c.kind FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE LOWER(t.repo)=LOWER($1) AND t.id = (SELECT id FROM tags WHERE LOWER(repo) = LOWER($1) ORDER BY time DESC LIMIT 1);", fullRepo)
-	} else {
-		pageData.Title += fmt.Sprintf("@%s", tag)
-		b.Queue("SELECT t.name, c.group, c.version, c.kind FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE LOWER(t.repo)=LOWER($1) AND t.name=$2;", fullRepo, tag)
-	}
 	b.Queue("SELECT name FROM tags WHERE LOWER(repo)=LOWER($1) ORDER BY time DESC;", fullRepo)
 	br := db.SendBatch(context.Background(), b)
 	defer br.Close()
 	c, err := br.Query()
-	if err != nil {
-		log.Printf("failed to get CRDs for %s : %v", repo, err)
-		if err := page.HTML(w, http.StatusOK, "new", baseData{Page: pageData}); err != nil {
-			log.Printf("newTemplate.Execute(): %v", err)
-			fmt.Fprint(w, "Unable to render new template.")
-		}
-		return
-	}
-	repoCRDs := map[string]models.RepoCRD{}
-	foundTag := tag
-	for c.Next() {
-		var t, g, v, k string
-		if err := c.Scan(&t, &g, &v, &k); err != nil {
-			log.Printf("newTemplate.Execute(): %v", err)
-			fmt.Fprint(w, "Unable to render new template.")
-		}
-		foundTag = t
-		repoCRDs[g+"/"+v+"/"+k] = models.RepoCRD{
-			Group:   g,
-			Version: v,
-			Kind:    k,
-		}
-	}
-	c, err = br.Query()
 	if err != nil {
 		log.Printf("failed to get tags for %s : %v", repo, err)
 		if err := page.HTML(w, http.StatusOK, "new", baseData{Page: pageData}); err != nil {
@@ -335,6 +307,7 @@ func org(w http.ResponseWriter, r *http.Request) {
 	}
 	tags := []string{}
 	tagExists := false
+	followsSemver := false
 	for c.Next() {
 		var t string
 		if err := c.Scan(&t); err != nil {
@@ -343,6 +316,10 @@ func org(w http.ResponseWriter, r *http.Request) {
 		}
 		if !tagExists && t == tag {
 			tagExists = true
+		}
+		if semver.IsValid(t) {
+			log.Println("tag follows semver -- will select latest semver version if tag has not been specified in url params")
+			followsSemver = true
 		}
 		tags = append(tags, t)
 	}
@@ -358,8 +335,49 @@ func org(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	if foundTag == "" {
-		foundTag = tags[0]
+	if tag == "" {
+		if len(tags) == 1 || !followsSemver {
+			tag = tags[0]
+		} else {
+			sort.SliceStable(tags, func(i, j int) bool {
+				switch res := semver.Compare(tags[i], tags[j]); res {
+				case -1:
+					return false
+				default:
+					return true
+				}
+			})
+			tag = tags[0]
+		}
+	} else {
+		pageData.Title += fmt.Sprintf("@%s", tag)
+	}
+	b = &pgx.Batch{}
+	b.Queue("SELECT t.name, c.group, c.version, c.kind FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE LOWER(t.repo)=LOWER($1) AND t.name=$2;", fullRepo, tag)
+	br = db.SendBatch(context.Background(), b)
+	defer br.Close()
+	c, err = br.Query()
+	if err != nil {
+		log.Printf("failed to get CRDs for %s : %v", repo, err)
+		if err := page.HTML(w, http.StatusOK, "new", baseData{Page: pageData}); err != nil {
+			log.Printf("newTemplate.Execute(): %v", err)
+			fmt.Fprint(w, "Unable to render new template.")
+		}
+		return
+	}
+	repoCRDs := map[string]models.RepoCRD{}
+	foundTag := tag
+	for c.Next() {
+		var t, g, v, k string
+		if err := c.Scan(&t, &g, &v, &k); err != nil {
+			log.Printf("error scanning in results: %v", err)
+		}
+		foundTag = t
+		repoCRDs[g+"/"+v+"/"+k] = models.RepoCRD{
+			Group:   g,
+			Version: v,
+			Kind:    k,
+		}
 	}
 	if err := page.HTML(w, http.StatusOK, "org", orgData{
 		Page:  pageData,
