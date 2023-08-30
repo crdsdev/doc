@@ -17,6 +17,7 @@ require (
 	github.com/prometheus/client_golang v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5
 	github.com/unrolled/render v1.0.3
+	golang.org/x/mod v0.3.0
 	golang.org/x/net v0.0.0-20201202161906-c7110b5ffcbb // indirect
 	golang.org/x/oauth2 v0.0.0-20201109201403-9fd604954f58 // indirect
 	golang.org/x/text v0.3.4 // indirect
