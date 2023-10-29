@@ -21,9 +21,6 @@ spec:
           envFrom:
             - secretRef:
                 name: pgsql-config
-          env:
-            - name: ANALYTICS
-              value: "false"
           ports:
             - containerPort: 5050
               name: doc
