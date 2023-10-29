@@ -80,7 +80,7 @@ type RepoUser struct {
 }
 
 func readConf(filename string) (*Config, error) {
-	buf, err := ioutil.ReadFile(filename)
+	buf, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, err
 	}
@@ -267,9 +267,10 @@ func getCRDsFromTag(dir string, tag string, hash *plumbing.Hash, w *git.Worktree
 	repoCRDs := map[string]models.RepoCRD{}
 	files := getYAMLs(g, dir)
 	for file, yamls := range files {
-		//if !strings.Contains(file, "config/crd/bases/") {
-		//	continue
-		//}
+		// Our Camunda-Operator has a lot of crds for the local setup in the repo
+		if !strings.Contains(file, "config/crd/bases/") {
+			continue
+		}
 		for _, y := range yamls {
 			crder, err := crd.NewCRDer(y, crd.StripLabels(), crd.StripAnnotations(), crd.StripConversion())
 			if err != nil || crder.CRD == nil {

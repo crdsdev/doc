@@ -44,7 +44,6 @@ import (
 
 var db *pgxpool.Pool
 
-// redis connection
 var (
 	envAnalytics   = "ANALYTICS"
 	envDevelopment = "IS_DEV"
