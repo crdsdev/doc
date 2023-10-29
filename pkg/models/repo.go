@@ -28,7 +28,8 @@ type RepoCRD struct {
 
 // GitterRepo is the repo for gitter to index.
 type GitterRepo struct {
-	Org  string
-	Repo string
-	Tag  string
+	Server string
+	Org    string
+	Repo   string
+	Tag    string
 }

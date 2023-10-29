@@ -28,8 +28,6 @@ import (
 	"os"
 	"strings"
 
-	crdutil "github.com/crdsdev/doc/pkg/crd"
-	"github.com/crdsdev/doc/pkg/models"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v4"
@@ -37,13 +35,15 @@ import (
 	flag "github.com/spf13/pflag"
 	"github.com/unrolled/render"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
-	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"sigs.k8s.io/yaml"
+
+	crdutil "github.com/crdsdev/doc/pkg/crd"
+	"github.com/crdsdev/doc/pkg/models"
 )
 
 var db *pgxpool.Pool
 
-// redis connection
 var (
 	envAnalytics   = "ANALYTICS"
 	envDevelopment = "IS_DEV"
@@ -109,13 +109,14 @@ type docData struct {
 }
 
 type orgData struct {
-	Page  pageData
-	Repo  string
-	Tag   string
-	At    string
-	Tags  []string
-	CRDs  map[string]models.RepoCRD
-	Total int
+	Page   pageData
+	Server string
+	Repo   string
+	Tag    string
+	At     string
+	Tags   []string
+	CRDs   map[string]models.RepoCRD
+	Total  int
 }
 
 type homeData struct {
@@ -193,12 +194,12 @@ func start() {
 	staticHandler := http.StripPrefix("/static/", http.FileServer(http.Dir("./static/")))
 	r.HandleFunc("/", home)
 	r.PathPrefix("/static/").Handler(staticHandler)
-	r.HandleFunc("/github.com/{org}/{repo}@{tag}", org)
-	r.HandleFunc("/github.com/{org}/{repo}", org)
-	r.HandleFunc("/raw/github.com/{org}/{repo}@{tag}", raw)
-	r.HandleFunc("/raw/github.com/{org}/{repo}", raw)
+	r.HandleFunc("/{server}/{org}/{repo}@{tag}", org)
+	r.HandleFunc("/{server}/{org}/{repo}", org)
+	r.HandleFunc("/raw/{server}/{org}/{repo}@{tag}", raw)
+	r.HandleFunc("/raw/{server}/{org}/{repo}", raw)
 	r.PathPrefix("/").HandlerFunc(doc)
-	log.Fatal(http.ListenAndServe(":5000", r))
+	log.Fatal(http.ListenAndServe(":5050", r))
 }
 
 func home(w http.ResponseWriter, r *http.Request) {
@@ -213,11 +214,12 @@ func home(w http.ResponseWriter, r *http.Request) {
 
 func raw(w http.ResponseWriter, r *http.Request) {
 	parameters := mux.Vars(r)
+	server := parameters["server"]
 	org := parameters["org"]
 	repo := parameters["repo"]
 	tag := parameters["tag"]
 
-	fullRepo := fmt.Sprintf("%s/%s/%s", "github.com", org, repo)
+	fullRepo := fmt.Sprintf("%s/%s/%s", server, org, repo)
 	var rows pgx.Rows
 	var err error
 	if tag == "" {
@@ -253,7 +255,7 @@ func raw(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "Unable to render raw CRDs.")
 		log.Printf("failed to get raw CRDs for %s : %v", repo, err)
 	} else {
-		w.Write([]byte(total))
+		w.Write(total)
 		log.Printf("successfully rendered raw CRDs")
 	}
 
@@ -285,11 +287,12 @@ func raw(w http.ResponseWriter, r *http.Request) {
 
 func org(w http.ResponseWriter, r *http.Request) {
 	parameters := mux.Vars(r)
+	server := parameters["server"]
 	org := parameters["org"]
 	repo := parameters["repo"]
 	tag := parameters["tag"]
 	pageData := getPageData(r, fmt.Sprintf("%s/%s", org, repo), false)
-	fullRepo := fmt.Sprintf("%s/%s/%s", "github.com", org, repo)
+	fullRepo := fmt.Sprintf("%s/%s/%s", server, org, repo)
 	b := &pgx.Batch{}
 	if tag == "" {
 		b.Queue("SELECT t.name, c.group, c.version, c.kind FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE LOWER(t.repo)=LOWER($1) AND t.id = (SELECT id FROM tags WHERE LOWER(repo) = LOWER($1) ORDER BY time DESC LIMIT 1);", fullRepo)
@@ -348,9 +351,10 @@ func org(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(tags) == 0 || (!tagExists && tag != "") {
 		tryIndex(models.GitterRepo{
-			Org:  org,
-			Repo: repo,
-			Tag:  tag,
+			Server: server,
+			Org:    org,
+			Repo:   repo,
+			Tag:    tag,
 		}, gitterChan)
 		if err := page.HTML(w, http.StatusOK, "new", baseData{Page: pageData}); err != nil {
 			log.Printf("newTemplate.Execute(): %v", err)
@@ -362,12 +366,13 @@ func org(w http.ResponseWriter, r *http.Request) {
 		foundTag = tags[0]
 	}
 	if err := page.HTML(w, http.StatusOK, "org", orgData{
-		Page:  pageData,
-		Repo:  strings.Join([]string{org, repo}, "/"),
-		Tag:   foundTag,
-		Tags:  tags,
-		CRDs:  repoCRDs,
-		Total: len(repoCRDs),
+		Page:   pageData,
+		Server: server,
+		Repo:   strings.Join([]string{org, repo}, "/"),
+		Tag:    foundTag,
+		Tags:   tags,
+		CRDs:   repoCRDs,
+		Total:  len(repoCRDs),
 	}); err != nil {
 		log.Printf("orgTemplate.Execute(): %v", err)
 		fmt.Fprint(w, "Unable to render org template.")
@@ -380,14 +385,14 @@ func doc(w http.ResponseWriter, r *http.Request) {
 	var schema *apiextensions.CustomResourceValidation
 	crd := &apiextensions.CustomResourceDefinition{}
 	log.Printf("Request Received: %s\n", r.URL.Path)
-	org, repo, group, kind, version, tag, err := parseGHURL(r.URL.Path)
+	server, org, repo, group, kind, version, tag, err := parseGHURL(r.URL.Path)
 	if err != nil {
 		log.Printf("failed to parse Github path: %v", err)
 		fmt.Fprint(w, "Invalid URL.")
 		return
 	}
 	pageData := getPageData(r, fmt.Sprintf("%s.%s/%s", kind, group, version), false)
-	fullRepo := fmt.Sprintf("%s/%s/%s", "github.com", org, repo)
+	fullRepo := fmt.Sprintf("%s/%s/%s", server, org, repo)
 	var c pgx.Row
 	if tag == "" {
 		c = db.QueryRow(context.Background(), "SELECT t.name, c.data::jsonb FROM tags t INNER JOIN crds c ON (c.tag_id = t.id) WHERE LOWER(t.repo)=LOWER($1) AND t.id = (SELECT id FROM tags WHERE repo = $1 ORDER BY time DESC LIMIT 1) AND c.group=$2 AND c.version=$3 AND c.kind=$4;", fullRepo, group, version, kind)
@@ -445,14 +450,14 @@ func doc(w http.ResponseWriter, r *http.Request) {
 }
 
 // TODO(hasheddan): add testing and more reliable parse
-func parseGHURL(uPath string) (org, repo, group, version, kind, tag string, err error) {
+func parseGHURL(uPath string) (server, org, repo, group, version, kind, tag string, err error) {
 	u, err := url.Parse(uPath)
 	if err != nil {
-		return "", "", "", "", "", "", err
+		return "", "", "", "", "", "", "", err
 	}
 	elements := strings.Split(strings.Trim(u.Path, "/"), "/")
 	if len(elements) < 6 {
-		return "", "", "", "", "", "", errors.New("invalid path")
+		return "", "", "", "", "", "", "", errors.New("invalid path")
 	}
 
 	tagSplit := strings.Split(u.Path, "@")
@@ -460,5 +465,5 @@ func parseGHURL(uPath string) (org, repo, group, version, kind, tag string, err 
 		tag = tagSplit[1]
 	}
 
-	return elements[1], elements[2], elements[3], elements[4], strings.Split(elements[5], "@")[0], tag, nil
+	return elements[0], elements[1], elements[2], elements[3], elements[4], strings.Split(elements[5], "@")[0], tag, nil
 }

@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: private-repos-auth
+  namespace: operator-documentation
+data:
+  # Add authentication details for private Github repos and servers as shown in the example entry
+  repos.yaml: |-
+    repos:
+     - name: private-org/private-repo
+       server: github.com
+       user:
+         name: sijoma
+         pwdFromEnv: GH_SIJOMA_SECRET
+---
+kind: Secret
+apiVersion: v1
+metadata:
+  name: pgsql-config
+  namespace: operator-documentation
+stringData:
+  PG_USER: "postgres"
+  PG_PASS: "password"
+  PG_HOST: "postgres.postgres"
+  PG_PORT: "5432"
+  PG_DB: "doc"

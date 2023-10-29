@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: doc
+  namespace: operator-documentation
+  labels:
+    app: doc
+spec:
+  selector:
+    matchLabels:
+      app: doc
+  template:
+    metadata:
+      labels:
+        app: doc
+    spec:
+      containers:
+        - name: doc
+          image: sijoma/doc:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: pgsql-config
+          ports:
+            - containerPort: 5050
+              name: doc
+        - name: gitter
+          image: sijoma/doc-gitter:latest
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: repo-config
+              mountPath: usr
+          envFrom:
+            - secretRef:
+                name: pgsql-config
+            - configMapRef:
+                name: private-repos-auth
+            - secretRef:
+                name: github-passwords
+      volumes:
+      - name: repo-config
+        configMap:
+          name: private-repos-auth
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: doc
+  namespace: operator-documentation
+  labels:
+    app: doc
+spec:
+  ports:
+    - port: 5050
+      targetPort: 5050
+  selector:
+    app: doc
+  type: ClusterIP
