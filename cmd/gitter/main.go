@@ -20,16 +20,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/crdsdev/doc/pkg/crd"
-	"github.com/crdsdev/doc/pkg/models"
-	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
-	gogithttp "github.com/go-git/go-git/v5/plumbing/transport/http"
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
-	"github.com/pkg/errors"
-	"gopkg.in/square/go-jose.v2/json"
-	"gopkg.in/yaml.v3"
 	"io"
 	"io/ioutil"
 	"log"
@@ -41,6 +31,18 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	gogithttp "github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/pkg/errors"
+	"gopkg.in/square/go-jose.v2/json"
+	"gopkg.in/yaml.v3"
+
+	"github.com/crdsdev/doc/pkg/crd"
+	"github.com/crdsdev/doc/pkg/models"
 )
 
 const (
@@ -158,6 +160,7 @@ func (g *Gitter) Index(gRepo models.GitterRepo, reply *string) error {
 			Password: os.Getenv(authUser.PwdFromEnv),
 		},
 	}
+	gRepo.Tag = "2.5.1-rc5"
 	if gRepo.Tag != "" {
 		cloneOpts.ReferenceName = plumbing.NewTagReferenceName(gRepo.Tag)
 		cloneOpts.SingleBranch = true
@@ -261,6 +264,9 @@ func getCRDsFromTag(dir string, tag string, hash *plumbing.Hash, w *git.Worktree
 	repoCRDs := map[string]models.RepoCRD{}
 	files := getYAMLs(g, dir)
 	for file, yamls := range files {
+		if !strings.Contains(file, "config/crd/bases/") {
+			continue
+		}
 		for _, y := range yamls {
 			crder, err := crd.NewCRDer(y, crd.StripLabels(), crd.StripAnnotations(), crd.StripConversion())
 			if err != nil || crder.CRD == nil {

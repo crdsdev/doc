@@ -45,8 +45,8 @@ data:
   # Add authentication details for private Github repos and servers as shown in the example entry
   repos.yaml: |-
     repos:
-     - name: owner/private-repository
-       server: github.mycompany.com
+     - name: camunda-cloud/camunda-operator
+       server: github.com
        user:
-         name: machineuser
+         name: sijoma
          pwdFromEnv: MACHINE_SECRET

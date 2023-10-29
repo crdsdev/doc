@@ -28,8 +28,6 @@ import (
 	"os"
 	"strings"
 
-	crdutil "github.com/crdsdev/doc/pkg/crd"
-	"github.com/crdsdev/doc/pkg/models"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v4"
@@ -39,6 +37,9 @@ import (
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"sigs.k8s.io/yaml"
+
+	crdutil "github.com/crdsdev/doc/pkg/crd"
+	"github.com/crdsdev/doc/pkg/models"
 )
 
 var db *pgxpool.Pool
@@ -199,7 +200,7 @@ func start() {
 	r.HandleFunc("/raw/{server}/{org}/{repo}@{tag}", raw)
 	r.HandleFunc("/raw/{server}/{org}/{repo}", raw)
 	r.PathPrefix("/").HandlerFunc(doc)
-	log.Fatal(http.ListenAndServe(":5000", r))
+	log.Fatal(http.ListenAndServe(":5050", r))
 }
 
 func home(w http.ResponseWriter, r *http.Request) {

@@ -37,7 +37,7 @@
     const { html } = htmReact;
     const { useTable, useSortBy, useGlobalFilter  } = ReactTable;
 
-    const { Server, Repo, CRDs, Tag, At, } = JSON.parse(`{{ . }}`);
+    const { Server, Repo, CRDs, Tag, At, } = ({{ . }});
     const data = Object.keys(CRDs).map(key => CRDs[key]);
 
     const columns = [
@@ -71,7 +71,7 @@
 
     function CRDTable() {
         const table = useTable({ columns, data }, useSortBy, useGlobalFilter);
-         const {
+        const {
             getTableProps,
             getTableBodyProps,
             headerGroups,
@@ -109,8 +109,9 @@
             </table>
         </div>`;
     }
-
+    //
     render(html`<${CRDTable} />`, document.getElementById("crds"));
+    //
 </script>
 <style>
     #crds .sort-header {
