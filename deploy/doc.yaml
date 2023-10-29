@@ -16,17 +16,12 @@ spec:
     spec:
       containers:
         - name: doc
-          image: crdsdev/doc:latest
+          image: sijoma/doc:latest
           env:
-            - name: REDIS_HOST
-              valueFrom:
-                secretKeyRef:
-                  name: doc-redis
-                  key: endpoint
             - name: ANALYTICS
-              value: "true"
+              value: "false"
           ports:
-            - containerPort: 5000
+            - containerPort: 5050
               name: doc
 ---
 apiVersion: v1
@@ -39,7 +34,7 @@ metadata:
 spec:
   ports:
     - port: 80
-      targetPort: 5000
+      targetPort: 5050
   selector:
     app: doc
   type: NodePort

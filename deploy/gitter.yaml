@@ -14,16 +14,11 @@ spec:
         spec:
           containers:
           - name: gitter
-            image: crdsdev/doc-gitter:latest
+            image: sijoma/doc-gitter:latest
             volumeMounts:
               - name: repo-config
                 mountPath: usr
             env:
-            - name: REDIS_HOST
-              valueFrom:
-                secretKeyRef:
-                  name: doc-redis
-                  key: endpoint
             - name: REPOS
               valueFrom:
                 configMapKeyRef:
@@ -33,7 +28,6 @@ spec:
             - name: repo-config
               configMap:
                 name: private-repos-auth
-
           restartPolicy: Never
 ---
 apiVersion: v1
