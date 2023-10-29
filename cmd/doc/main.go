@@ -256,7 +256,7 @@ func raw(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "Unable to render raw CRDs.")
 		log.Printf("failed to get raw CRDs for %s : %v", repo, err)
 	} else {
-		w.Write([]byte(total))
+		w.Write(total)
 		log.Printf("successfully rendered raw CRDs")
 	}
 

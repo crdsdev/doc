@@ -136,7 +136,7 @@ type tag struct {
 
 // Index indexes a git repo at the specified url.
 func (g *Gitter) Index(gRepo models.GitterRepo, reply *string) error {
-	dir, err := ioutil.TempDir(os.TempDir(), "doc-gitter")
+	dir, err := os.MkdirTemp(os.TempDir(), "doc-gitter")
 	if err != nil {
 		return err
 	}
@@ -150,6 +150,7 @@ func (g *Gitter) Index(gRepo models.GitterRepo, reply *string) error {
 
 	log.Printf("Indexing repo %s...\n", fullRepo)
 
+	log.Printf("user: %s, using secret from envKey: %s", authUser.Name, authUser.PwdFromEnv)
 	cloneOpts := &git.CloneOptions{
 		URL:               fmt.Sprintf("https://%s", fullRepo),
 		Depth:             1,
@@ -160,7 +161,9 @@ func (g *Gitter) Index(gRepo models.GitterRepo, reply *string) error {
 			Password: os.Getenv(authUser.PwdFromEnv),
 		},
 	}
-	gRepo.Tag = "2.5.1-rc5"
+
+	// Manual override to only have this tag
+	// gRepo.Tag = "2.5.1-rc5"
 	if gRepo.Tag != "" {
 		cloneOpts.ReferenceName = plumbing.NewTagReferenceName(gRepo.Tag)
 		cloneOpts.SingleBranch = true
@@ -264,9 +267,9 @@ func getCRDsFromTag(dir string, tag string, hash *plumbing.Hash, w *git.Worktree
 	repoCRDs := map[string]models.RepoCRD{}
 	files := getYAMLs(g, dir)
 	for file, yamls := range files {
-		if !strings.Contains(file, "config/crd/bases/") {
-			continue
-		}
+		//if !strings.Contains(file, "config/crd/bases/") {
+		//	continue
+		//}
 		for _, y := range yamls {
 			crder, err := crd.NewCRDer(y, crd.StripLabels(), crd.StripAnnotations(), crd.StripConversion())
 			if err != nil || crder.CRD == nil {
